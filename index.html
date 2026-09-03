@@ -1099,16 +1099,22 @@ async function fetchAll(vid, signal, onProgress) {
 
   // phase 1 — every top-level thread
   const threads = [];
+  // Comments physically in hand. The thread endpoint returns a few replies
+  // inline per thread, so real replies land during this phase too. Counting
+  // what has arrived — never what YouTube says exists — is what keeps this
+  // number from having to be revised downward later.
+  let inHand = 0;
   let token;
   do {
     const d = await apiGet('commentThreads', {
       part: 'snippet,replies', videoId: vid, maxResults: 100,
       order: 'time', textFormat: 'plainText', pageToken: token || '',
     }, signal);
-    threads.push(...(d.items || []));
+    const items = d.items || [];
+    threads.push(...items);
+    for (const t of items) inHand += 1 + ((t.replies && t.replies.comments) || []).length;
     token = d.nextPageToken;
-    const counted = threads.reduce((n, t) => n + 1 + (t.snippet.totalReplyCount || 0), 0);
-    onProgress({ phase: 'threads', fetched: counted, expected, threads: threads.length });
+    onProgress({ phase: 'fetching', inHand, expected, stage: 'comments' });
   } while (token);
 
   // phase 2 — expand threads whose inline preview is short
@@ -1123,7 +1129,11 @@ async function fetchAll(vid, signal, onProgress) {
     const total = t.snippet.totalReplyCount || 0;
     const preview = (t.replies && t.replies.comments) || [];
     if (!total) continue;
-    if (preview.length >= total) { repliesBy.set(tid, preview.map((c) => norm(c, tid))); continue; }
+    if (preview.length >= total) {
+      // Already counted inline during phase 1 — nothing new arrives here.
+      repliesBy.set(tid, preview.map((c) => norm(c, tid)));
+      continue;
+    }
 
     const acc = [];
     let rtok;
@@ -1136,10 +1146,11 @@ async function fetchAll(vid, signal, onProgress) {
       rtok = d.nextPageToken;
     } while (rtok);
     repliesBy.set(tid, acc);
+    // The full set replaces the inline preview, so only the surplus is new.
+    // acc.length >= preview.length always, so this can never subtract.
+    inHand += Math.max(0, acc.length - preview.length);
     done++;
-    const got = comments.length + [...repliesBy.values()].reduce((n, a) => n + a.length, 0);
-    onProgress({ phase: 'replies', fanout_done: done, fanout_total: needs.length,
-                 fetched: got, expected });
+    onProgress({ phase: 'fetching', inHand, expected, stage: 'replies' });
   }
 
   for (const arr of repliesBy.values()) {
@@ -1157,7 +1168,9 @@ async function fetchAll(vid, signal, onProgress) {
     replyCount: [...repliesBy.values()].reduce((n, a) => n + a.length, 0),
     fetchedCount: comments.length, comments,
   };
-  onProgress({ phase: 'done', fetched: comments.length, expected });
+  onProgress({ phase: 'done', comments: threads.length,
+               replies: [...repliesBy.values()].reduce((n, a) => n + a.length, 0),
+               inHand: comments.length });
   return payload;
 }
 
@@ -1345,42 +1358,51 @@ async function startFetch() {
   }
 }
 
-let progressFloor = 0;
-const PHASE1_SHARE = 0.7;   // reading threads is most of the work
+/* One bar for the whole fetch, driven by comments actually in hand against
+   YouTube's published total. Both terms only ever grow, so the bar cannot go
+   backwards, and the figure is never a projection of unfetched data. */
+let inHandFloor = 0;
 
 function onProgress(p) {
   const fill = $('#progressFill'), txt = $('#progressText');
+
   if (p.phase === 'video') {
-    progressFloor = 0;
+    inHandFloor = 0;
+    fill.classList.add('indet');
+    fill.style.width = '';
     txt.textContent = 'Starting…';
     return;
   }
+
+  if (p.phase === 'fetching') {
+    inHandFloor = Math.max(inHandFloor, p.inHand || 0);
+    const got = inHandFloor.toLocaleString();
+    if (!p.expected) {
+      // No published total to divide by; show the tally on a moving bar.
+      fill.classList.add('indet');
+      fill.style.width = '';
+      txt.textContent = `${got} comments fetched`;
+      return;
+    }
+    // Held below 100 while comments are still outstanding — but once every
+    // expected comment is in hand, saying 99% would understate just as badly.
+    const pct = inHandFloor >= p.expected
+      ? 100
+      : Math.min(99, Math.floor((inHandFloor / p.expected) * 100));
+    fill.classList.remove('indet');
+    fill.style.width = pct + '%';
+    txt.textContent =
+      `${got} of ${p.expected.toLocaleString()} comments · ${pct}%` +
+      (p.stage === 'replies' ? ' · expanding replies' : '');
+    return;
+  }
+
   if (p.phase === 'done') {
     fill.classList.remove('indet');
     fill.style.width = '100%';
-    txt.textContent = '100%';
-    return;
+    txt.textContent = `Done — ${(p.comments || 0).toLocaleString()} comments, ` +
+      `${(p.replies || 0).toLocaleString()} replies`;
   }
-
-  let pct = null;
-  if (p.phase === 'threads' && p.expected > 0) {
-    pct = (p.fetched / p.expected) * PHASE1_SHARE * 100;
-  } else if (p.phase === 'replies' && p.fanout_total > 0) {
-    pct = (PHASE1_SHARE + (p.fanout_done / p.fanout_total) * (1 - PHASE1_SHARE)) * 100;
-  } else if (p.phase === 'replies') {
-    pct = PHASE1_SHARE * 100;
-  }
-
-  if (pct === null) {
-    // No published comment count, so nothing to take a percentage of.
-    txt.textContent = p.fetched.toLocaleString() + ' comments';
-    return;
-  }
-  // Never let the bar travel backwards, whatever the estimates do.
-  progressFloor = Math.max(progressFloor, Math.min(99, Math.floor(pct)));
-  fill.classList.remove('indet');
-  fill.style.width = progressFloor + '%';
-  txt.textContent = progressFloor + '%';
 }
 
 /* ── payload → threads ─────────────────────────────────── */
