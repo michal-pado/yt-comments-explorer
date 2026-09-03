@@ -1,0 +1,2428 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YouTube Comment Explorer</title>
+<style>
+/* ── tokens ───────────────────────────────────────────── */
+:root {
+  --bg: #14181b;  --panel: #1a2025;  --panel-2: #202830;
+  --ink: #e6eaed;  --ink-2: #c3cbd2;  --muted: #8a959e;  --faint: #5f6b74;
+  --rule: #2a3238;  --rule-soft: #222a30;
+  --accent: #4ec9c4;  --accent-ink: #0b1417;  --accent-dim: #2f8b88;
+  --danger: #e2685f;  --warn: #d9a441;  --good: #56b877;
+  --hit: #b8860b;  --hit-ink: #fff6dc;  --hit-active: #ff9f1a;  --hit-active-ink: #1a0e00;
+  --shadow: 0 12px 34px rgba(0,0,0,.5);
+  --r: 7px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+}
+:root[data-theme="light"] {
+  --bg: #ffffff;  --panel: #f4f6f7;  --panel-2: #eaeef0;
+  --ink: #12171c;  --ink-2: #2c353d;  --muted: #5c666f;  --faint: #8b959d;
+  --rule: #e0e5e9;  --rule-soft: #eef1f3;
+  --accent: #0e7c7b;  --accent-ink: #ffffff;  --accent-dim: #12a09e;
+  --danger: #c0392b;  --warn: #a97a12;  --good: #2f8a52;
+  --hit: #ffd75e;  --hit-ink: #241c00;  --hit-active: #ff8c00;  --hit-active-ink: #fff6e5;
+  --shadow: 0 12px 30px rgba(20,30,40,.16);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+.hidden { display: none !important; }
+button, input { font: inherit; color: inherit; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+::selection { background: var(--hit); }
+
+/* scrollbars */
+#list::-webkit-scrollbar, #histList::-webkit-scrollbar, #main::-webkit-scrollbar,
+.modal::-webkit-scrollbar { width: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 6px;
+  border: 3px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--faint); }
+
+/* ── buttons ──────────────────────────────────────────── */
+.btn {
+  border: 1px solid var(--rule); background: var(--panel); color: var(--ink);
+  padding: 7px 14px; border-radius: var(--r); cursor: pointer; white-space: nowrap;
+  transition: background .12s, border-color .12s;
+}
+.btn:hover:not(:disabled) { background: var(--panel-2); border-color: var(--faint); }
+.btn:disabled { opacity: .42; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink);
+  font-weight: 600; }
+.btn.primary:hover:not(:disabled) { background: var(--accent-dim); border-color: var(--accent-dim); }
+.btn.ghost { background: transparent; }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
+.btn.danger-text { color: var(--danger); }
+.btn.danger-text:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.btn.small { padding: 5px 10px; font-size: 13px; }
+.icon-btn {
+  border: 1px solid transparent; background: transparent; color: var(--muted);
+  width: 32px; height: 32px; border-radius: var(--r); cursor: pointer;
+  display: grid; place-items: center;
+}
+.icon-btn:hover { background: var(--panel-2); color: var(--ink); }
+
+/* ── shell ────────────────────────────────────────────── */
+#shell { display: flex; flex-direction: column; height: 100vh; }
+
+#topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-bottom: 1px solid var(--rule); background: var(--panel);
+  flex: 0 0 auto;
+}
+.brand { color: var(--accent); display: grid; place-items: center; padding-left: 2px; }
+.url-wrap { flex: 1; display: flex; gap: 8px; align-items: center; min-width: 0; }
+#urlInput {
+  flex: 1; min-width: 0; padding: 8px 12px; border-radius: var(--r);
+  border: 1px solid var(--rule); background: var(--bg); color: var(--ink);
+}
+#urlInput:focus { border-color: var(--accent); outline: none; }
+.top-right { display: flex; gap: 4px; }
+
+/* progress */
+#progressWrap { padding: 8px 14px; border-bottom: 1px solid var(--rule);
+  background: var(--panel); flex: 0 0 auto; }
+#progressBar { height: 4px; background: var(--rule); border-radius: 3px; overflow: hidden; }
+#progressFill { display: block; height: 100%; width: 0%; background: var(--accent);
+  transition: width .25s ease; }
+#progressFill.indet { width: 34%; animation: slide 1.15s ease-in-out infinite; }
+@keyframes slide { 0% { margin-left: -34%; } 100% { margin-left: 100%; } }
+#progressText { margin-top: 6px; font-size: 12.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) {
+  #progressFill.indet { animation-duration: 2.4s; }
+  * { scroll-behavior: auto !important; }
+}
+
+#body { flex: 1; display: flex; min-height: 0; }
+#main { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-direction: column; }
+
+/* ── toolbar ──────────────────────────────────────────── */
+#stickyTop { position: sticky; top: 0; z-index: 20; background: var(--bg); }
+#toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+  padding: 10px 18px; background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+#toolbar.disabled { opacity: .45; pointer-events: none; }
+.tb-group { display: flex; align-items: center; gap: 7px; }
+.tb-group.grow { flex: 1; min-width: 260px; }
+.tb-label { font-size: 12px; color: var(--muted); }
+#searchInput {
+  flex: 1; min-width: 140px; padding: 7px 11px; border-radius: var(--r);
+  border: 1px solid var(--rule); background: var(--panel); color: var(--ink);
+}
+#searchInput:focus { border-color: var(--accent); outline: none; background: var(--bg); }
+#searchInput.bad { border-color: var(--danger); }
+
+.segmented { display: flex; border: 1px solid var(--rule); border-radius: var(--r);
+  overflow: hidden; background: var(--panel); }
+.segmented button { border: 0; background: transparent; padding: 6px 13px; cursor: pointer;
+  color: var(--muted); border-right: 1px solid var(--rule); }
+.segmented button:last-child { border-right: 0; }
+.segmented button:hover { color: var(--ink); }
+.segmented button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+.check { position: relative; display: inline-flex; align-items: center; cursor: pointer;
+  user-select: none; }
+.check input { position: absolute; opacity: 0; width: 0; height: 0; }
+.check span {
+  display: grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px;
+  border: 1px solid var(--rule); border-radius: var(--r); background: var(--panel);
+  color: var(--muted); font-family: var(--mono); font-size: 12px;
+}
+.check:hover span { color: var(--ink); border-color: var(--faint); }
+.check input:checked + span { background: var(--accent); border-color: var(--accent);
+  color: var(--accent-ink); font-weight: 700; }
+.check input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.check em {
+  position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  background: var(--panel-2); border: 1px solid var(--rule); color: var(--ink);
+  padding: 4px 8px; border-radius: 5px; font-size: 12px; font-style: normal;
+  white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 40;
+}
+.check:hover em { opacity: 1; }
+
+.dates { gap: 5px; }
+.date-field { position: relative; display: flex; align-items: center; }
+.date-field input {
+  width: 122px; padding: 7px 30px 7px 10px; border-radius: var(--r);
+  border: 1px solid var(--rule); background: var(--panel); color: var(--ink);
+  font-family: var(--mono); font-size: 12.5px;
+}
+.date-field input:focus { border-color: var(--accent); outline: none; background: var(--bg); }
+.date-field input.bad { border-color: var(--danger); }
+.cal-btn { position: absolute; right: 3px; width: 24px; height: 24px; border: 0;
+  background: transparent; color: var(--muted); cursor: pointer; display: grid;
+  place-items: center; border-radius: 4px; }
+.cal-btn:hover { color: var(--accent); background: var(--panel-2); }
+
+.menu-wrap { position: relative; }
+.menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 60;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: var(--r);
+  box-shadow: var(--shadow); min-width: 168px; padding: 5px; display: grid; gap: 2px;
+}
+.menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent;
+  padding: 8px 10px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.menu button:hover { background: var(--panel-2); }
+
+/* ── filter note / video header ───────────────────────── */
+#filterNote {
+  margin: 12px 18px 0; padding: 8px 12px; border-radius: var(--r);
+  background: var(--panel); border: 1px solid var(--rule);
+  font-size: 12.5px; color: var(--muted); display: flex; gap: 8px; align-items: center;
+}
+#filterNote b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+#videoHead { padding: 16px 18px 10px; display: flex; gap: 14px; align-items: flex-start; }
+#videoHead .vh-thumb { width: 116px; aspect-ratio: 16/9; object-fit: cover;
+  border-radius: var(--r); background: var(--panel); flex: 0 0 auto; }
+#videoHead h1 { margin: 0 0 4px; font-size: 17px; line-height: 1.35; font-weight: 620; }
+#videoHead .vh-meta { font-size: 12.5px; color: var(--muted); line-height: 1.7;
+  font-variant-numeric: tabular-nums; }
+#videoHead .vh-warn { color: var(--warn); }
+
+/* ── empty state ──────────────────────────────────────── */
+#empty { flex: 1; display: grid; place-items: center; padding: 40px; }
+.empty-inner { max-width: 460px; text-align: center; }
+.empty-inner h2 { margin: 0 0 8px; font-size: 17px; font-weight: 600; }
+.empty-inner p { margin: 0; color: var(--muted); line-height: 1.65; }
+
+/* ── comments ─────────────────────────────────────────── */
+#list { padding: 4px 18px 0; }
+.thread { padding: 15px 0 4px; border-top: 1px solid var(--rule-soft); }
+.thread:first-child { border-top: 0; }
+
+.cm { display: flex; gap: 11px; margin-bottom: 12px; }
+.cm.reply { margin-left: 30px; }
+.av { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; display: grid;
+  place-items: center; font-weight: 700; font-size: 13px; color: #fff; user-select: none; }
+.cm.reply .av { width: 26px; height: 26px; font-size: 11px; }
+.cm-body { min-width: 0; flex: 1; }
+.cm-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 2px; font-size: 12.5px; }
+.cm-author { font-weight: 600; font-size: 13px; color: var(--ink); cursor: pointer; }
+.cm-author:hover { color: var(--accent); text-decoration: underline; }
+.cm-age { color: var(--muted); cursor: pointer; }
+.cm-age:hover { color: var(--accent); text-decoration: underline; }
+.cm-op { font-size: 11px; padding: 1px 6px; border-radius: 9px;
+  background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.cm-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink-2); }
+.cm-text a { color: var(--accent); }
+.cm-text mark { background: var(--hit); color: var(--hit-ink); border-radius: 2px;
+  padding: 0 2px; font-weight: 600; }
+.cm-text mark.active { background: var(--hit-active); color: var(--hit-active-ink);
+  box-shadow: 0 0 0 2px var(--hit-active); }
+.cm-foot { margin-top: 5px; font-size: 12px; color: var(--muted);
+  display: flex; gap: 12px; align-items: center; font-variant-numeric: tabular-nums; }
+.cm-likes { white-space: nowrap; }
+.rep-count { color: var(--muted); font-size: 12.5px; margin: 2px 0 8px 30px;
+  font-variant-numeric: tabular-nums; }
+.rep-toggle { background: transparent; border: 0; color: var(--accent); cursor: pointer;
+  padding: 3px 8px; border-radius: 5px; font-size: 12.5px; font-weight: 600; margin-left: 30px; }
+.rep-toggle:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+#listEnd { text-align: center; color: var(--faint); font-size: 12.5px; padding: 22px 0 34px; }
+#sentinel { height: 1px; }
+
+/* ── sidebar ──────────────────────────────────────────── */
+#sidebar {
+  width: 288px; flex: 0 0 288px; border-left: 1px solid var(--rule);
+  background: var(--panel); display: flex; flex-direction: column; min-height: 0;
+}
+#sidebar.collapsed { display: none; }
+.side-head { padding: 12px 12px 10px; border-bottom: 1px solid var(--rule); }
+.side-head h2 { margin: 0 0 9px; font-size: 13px; font-weight: 600; color: var(--muted); }
+#histSearch { width: 100%; padding: 6px 10px; border-radius: var(--r);
+  border: 1px solid var(--rule); background: var(--bg); color: var(--ink); font-size: 13px; }
+#histSearch:focus { border-color: var(--accent); outline: none; }
+#histList { flex: 1; overflow-y: auto; padding: 6px; min-height: 0; }
+.hist {
+  display: flex; gap: 9px; padding: 8px; border-radius: var(--r); cursor: pointer;
+  border: 1px solid transparent;
+}
+.hist:hover { background: var(--panel-2); }
+.hist.active { background: var(--panel-2); border-color: var(--accent); }
+.hist img { width: 54px; height: 30px; object-fit: cover; border-radius: 4px;
+  background: var(--rule); flex: 0 0 auto; }
+.hist-info { min-width: 0; }
+.hist-title { font-size: 12.5px; line-height: 1.35; margin-bottom: 3px; }
+.hist-sub { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.side-empty { padding: 22px 14px; color: var(--faint); font-size: 12.5px; text-align: center; }
+.side-foot { padding: 9px; border-top: 1px solid var(--rule); }
+.side-foot .btn { width: 100%; }
+
+/* ── quota bar ────────────────────────────────────────── */
+#quotabar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 9px;
+  padding: 6px 14px; border-top: 1px solid var(--rule); background: var(--panel);
+  font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.q-spacer { flex: 1; }
+.q-status { color: var(--muted); }
+
+/* ── overlays ─────────────────────────────────────────── */
+.overlay {
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--bg) 72%, #000 28%); backdrop-filter: blur(3px);
+  padding: 24px;
+}
+.modal, .ob-card {
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 12px;
+  box-shadow: var(--shadow); width: 100%; max-width: 560px; padding: 22px 24px;
+  max-height: 88vh; overflow-y: auto;
+}
+.modal.narrow, .ob-card { max-width: 430px; }
+.modal header { display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 4px; }
+.modal h2, .ob-card h1 { margin: 0 0 6px; font-size: 18px; font-weight: 620; }
+.modal h3 { margin: 0 0 5px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.modal section { padding: 18px 0; border-top: 1px solid var(--rule); }
+.modal section:first-of-type { border-top: 0; }
+.sub { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0 0 12px; }
+.row { display: flex; align-items: center; }
+.row.end { justify-content: flex-end; }
+.row.gap { gap: 8px; }
+
+.key-row { display: flex; gap: 7px; align-items: center; }
+.key-row input {
+  flex: 1; min-width: 0; padding: 8px 11px; border-radius: var(--r);
+  border: 1px solid var(--rule); background: var(--bg); color: var(--ink);
+  font-family: var(--mono); font-size: 13px;
+}
+.key-row input:focus { border-color: var(--accent); outline: none; }
+.key-status { min-height: 20px; font-size: 12.5px; margin: 9px 0 2px; }
+.key-status.ok { color: var(--good); }
+.key-status.err { color: var(--danger); }
+.key-status.busy { color: var(--muted); }
+.current-key {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 11px;
+  padding: 9px 11px; border-radius: var(--r); background: var(--bg);
+  border: 1px solid var(--rule); font-family: var(--mono); font-size: 13px;
+}
+.current-key .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
+.current-key.none { color: var(--muted); font-family: var(--sans); }
+.current-key.none .dot { background: var(--faint); }
+
+.theme-choices { display: flex; gap: 12px; }
+.theme-choices.compact { gap: 9px; }
+.theme-choice {
+  flex: 1; border: 2px solid var(--rule); background: var(--bg); border-radius: 10px;
+  padding: 13px; cursor: pointer; display: grid; gap: 9px; justify-items: center;
+  transition: border-color .12s;
+}
+.theme-choice:hover { border-color: var(--faint); }
+.theme-choice.on { border-color: var(--accent); }
+.swatch { width: 100%; height: 46px; border-radius: 6px; display: grid; gap: 4px;
+  padding: 8px; align-content: center; }
+.swatch.light { background: #fff; border: 1px solid #dfe4e8; }
+.swatch.dark { background: #14181b; border: 1px solid #2a3238; }
+.swatch i { display: block; height: 4px; border-radius: 2px; }
+.swatch.light i { background: #cbd3d9; } .swatch.light i:first-child { background: #0e7c7b; width: 60%; }
+.swatch.dark i { background: #333d45; } .swatch.dark i:first-child { background: #4ec9c4; width: 60%; }
+.tc-name { font-size: 13px; font-weight: 600; }
+
+/* ── calendar ─────────────────────────────────────────── */
+.cal {
+  position: fixed; z-index: 300; background: var(--panel); border: 1px solid var(--rule);
+  border-radius: 10px; box-shadow: var(--shadow); padding: 11px; width: 246px;
+}
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.cal-head button { border: 0; background: transparent; color: var(--muted); cursor: pointer;
+  width: 26px; height: 26px; border-radius: 5px; }
+.cal-head button:hover { background: var(--panel-2); color: var(--ink); }
+.cal-title { font-size: 13px; font-weight: 600; cursor: pointer; padding: 3px 8px;
+  border-radius: 5px; }
+.cal-title:hover { background: var(--panel-2); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-dow { font-size: 10.5px; color: var(--faint); text-align: center; padding: 3px 0; }
+.cal-day { border: 0; background: transparent; color: var(--ink); cursor: pointer;
+  aspect-ratio: 1; border-radius: 5px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.cal-day:hover { background: var(--panel-2); }
+.cal-day.dim { color: var(--faint); }
+.cal-day.today { box-shadow: inset 0 0 0 1px var(--accent); }
+.cal-day.sel { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.cal-months { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.cal-months button, .cal-years button { border: 0; background: transparent; color: var(--ink);
+  cursor: pointer; padding: 8px 0; border-radius: 5px; font-size: 12.5px; }
+.cal-months button:hover, .cal-years button:hover { background: var(--panel-2); }
+.cal-years { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+  max-height: 210px; overflow-y: auto; }
+.cal-foot { display: flex; justify-content: space-between; margin-top: 8px;
+  padding-top: 8px; border-top: 1px solid var(--rule); }
+.cal-foot button { border: 0; background: transparent; color: var(--accent); cursor: pointer;
+  font-size: 12.5px; padding: 4px 7px; border-radius: 5px; }
+.cal-foot button:hover { background: var(--panel-2); }
+
+/* ── context menu + toast ─────────────────────────────── */
+.ctx {
+  position: fixed; z-index: 300; background: var(--panel); border: 1px solid var(--rule);
+  border-radius: var(--r); box-shadow: var(--shadow); padding: 4px; min-width: 152px;
+}
+.ctx button { display: block; width: 100%; text-align: left; border: 0; background: transparent;
+  padding: 7px 11px; border-radius: 5px; cursor: pointer; font-size: 13px; }
+.ctx button:hover { background: var(--panel-2); }
+.ctx button.danger-text { color: var(--danger); }
+
+.toast {
+  position: fixed; bottom: 46px; left: 50%; transform: translateX(-50%);
+  background: var(--panel-2); border: 1px solid var(--rule); color: var(--ink);
+  padding: 10px 17px; border-radius: 9px; box-shadow: var(--shadow); z-index: 400;
+  font-size: 13px; max-width: 68vw;
+}
+.toast.err { border-color: var(--danger); color: var(--danger); }
+.toast.ok { border-color: var(--good); }
+
+@media (max-width: 1040px) {
+  #sidebar { width: 244px; flex-basis: 244px; }
+  .tb-group.grow { min-width: 180px; }
+}
+
+/* ══ additions for the standalone browser build ══ */
+
+/* storage meter in the footer */
+.s-meter { width: 76px; height: 5px; background: var(--rule); border-radius: 3px;
+  overflow: hidden; flex: 0 0 auto; }
+.s-fill { display: block; height: 100%; width: 0%; background: var(--good);
+  transition: width .3s, background .3s; }
+.s-fill.mid { background: var(--warn); }
+.s-fill.high { background: var(--danger); }
+
+/* import/export bar in settings */
+.stack { display: grid; gap: 8px; }
+.inline-note { font-size: 12px; color: var(--muted); margin-top: 7px; line-height: 1.55; }
+.kv { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0;
+  border-bottom: 1px solid var(--rule-soft); font-size: 13px; }
+.kv:last-child { border-bottom: 0; }
+.kv span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* first-run notice about where data lives */
+.callout { background: var(--bg); border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+  border-radius: 5px; padding: 10px 12px; font-size: 12.5px; color: var(--muted);
+  line-height: 1.6; margin: 10px 0; }
+
+/* busy spinner for the print/export step */
+.spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--rule);
+  border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite;
+  vertical-align: -2px; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ══ print / PDF ══ */
+@media print {
+  @page { margin: 14mm; }
+  html, body { height: auto !important; overflow: visible !important;
+    background: #fff !important; color: #000 !important; }
+  #topbar, #toolbar, #sidebar, #quotabar, #progressWrap, #empty, #sentinel,
+  .overlay, .ctx, .cal, .toast, .rep-toggle, #filterNote { display: none !important; }
+  #shell, #body, #main { display: block !important; height: auto !important;
+    overflow: visible !important; }
+  #main { padding: 0 !important; }
+  #list { padding: 0 !important; }
+  #printHead { display: block !important; margin-bottom: 16px; }
+  #videoHead { display: none !important; }
+  .thread { break-inside: avoid; page-break-inside: avoid;
+    border-top: 1px solid #ccc !important; padding: 11px 0 3px; }
+  .cm-text, .cm-author, .cm-head { color: #000 !important; }
+  .cm-age, .cm-foot, .cm-likes { color: #555 !important; }
+  .cm-text a { color: #06c !important; text-decoration: underline; }
+  .cm-text mark { background: #ffe9a8 !important; color: #000 !important; }
+  .av { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .cm.reply { margin-left: 24px; }
+  #listEnd { display: none !important; }
+  a[href]::after { content: ""; }
+}
+#printHead { display: none; }
+#printHead h1 { font-size: 19px; margin: 0 0 5px; }
+#printHead .ph-meta { font-size: 12px; color: #444; line-height: 1.6; }
+
+/* ══ custom tooltip (native title delay isn't adjustable) ══ */
+.tip {
+  position: fixed; z-index: 500; pointer-events: none;
+  background: var(--panel-2); border: 1px solid var(--rule); color: var(--ink);
+  padding: 6px 9px; border-radius: 6px; font-size: 12px; line-height: 1.45;
+  white-space: pre-line; max-width: 320px; box-shadow: var(--shadow);
+  opacity: 0; transition: opacity .09s ease;
+}
+.tip.on { opacity: 1; }
+
+/* thumbs-up glyph sits on the text baseline */
+.cm-likes { display: inline; white-space: nowrap; }
+.cm-likes svg { width: 13px; height: 13px; vertical-align: -2px; margin-right: 4px; }
+.vh-age { cursor: default; border-bottom: 1px dotted var(--faint); }
+
+/* full API key display */
+.current-key .key-text { overflow-wrap: anywhere; user-select: all; }
+.current-key .key-copy { width: 26px; height: 26px; flex: 0 0 auto; font-size: 14px; }
+.current-key .key-active { margin-left: auto; color: var(--good);
+  font-family: var(--sans); flex: 0 0 auto; }
+
+/* video-header like count */
+/* Plain inline, not inline-flex: an inline-flex box takes its baseline from its
+   first flex item, and an SVG has none, so the number drifts off the text baseline. */
+.vh-likes { white-space: nowrap; }
+.vh-likes svg { width: 13px; height: 13px; vertical-align: -2px; margin-right: 4px; }
+
+/* ══ find bar (ctrl+F style) ══ */
+#findBar {
+  margin: 10px 18px; padding: 6px 8px 6px 6px; border-radius: var(--r);
+  background: var(--panel); border: 1px solid var(--rule);
+  display: flex; gap: 6px; align-items: center; font-size: 12.5px;
+}
+.find-nav {
+  width: 26px; height: 26px; flex: 0 0 auto; border: 1px solid var(--rule);
+  background: var(--bg); color: var(--ink); border-radius: 5px; cursor: pointer;
+  font-size: 15px; line-height: 1; display: grid; place-items: center;
+}
+.find-nav:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.find-nav:disabled { opacity: .35; cursor: not-allowed; }
+.find-count { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600;
+  min-width: 82px; }
+.find-count.none { color: var(--danger); font-weight: 500; }
+.find-extra { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ══ collapse rail ══ */
+.rep-wrap { display: flex; gap: 0; margin-left: 17px; }
+.rail {
+  flex: 0 0 auto; width: 16px; border: 0; background: none; cursor: pointer;
+  padding: 0 0 10px; display: flex; justify-content: center; align-self: stretch;
+}
+.rail::before {
+  content: ''; width: 2px; height: 100%; background: var(--rule);
+  border-radius: 1px; transition: background .12s, width .12s;
+}
+.rail:hover::before { background: var(--accent); width: 3px; }
+.rep-box { flex: 1; min-width: 0; padding-left: 12px; }
+.rep-box .cm.reply { margin-left: 0; }
+.rep-box .rep-toggle { margin-left: 0; }
+.rep-collapsed {
+  display: none; border: 0; background: none; color: var(--accent); cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 600; padding: 2px 10px; text-align: left;
+}
+.rep-collapsed:hover { text-decoration: underline; }
+.rep-wrap.collapsed .rep-box { display: none; }
+.rep-wrap.collapsed .rep-collapsed { display: block; align-self: center; }
+.rep-wrap.collapsed .rail { padding-bottom: 0; }
+.rep-wrap.collapsed .rail::before { background: var(--faint); }
+@media print { .rail { display: none; } .rep-box { padding-left: 12px; }
+  .rep-collapsed { display: none !important; } .rep-wrap { margin-left: 24px; } }
+
+/* ══ URL field with inline clear button ══ */
+.url-field { flex: 1; min-width: 0; position: relative; display: flex; align-items: center; }
+.url-field #urlInput { width: 100%; padding-right: 34px; }
+.url-clear {
+  position: absolute; right: 6px; width: 24px; height: 24px; border: 0;
+  background: transparent; color: var(--faint); cursor: pointer; border-radius: 5px;
+  display: grid; place-items: center; padding: 0;
+}
+.url-clear:hover { color: var(--danger); background: var(--panel-2); }
+
+/* ══ history rows ══ */
+.hist-title {
+  -webkit-line-clamp: unset; -webkit-box-orient: unset; display: block;
+  overflow: visible; overflow-wrap: anywhere;
+}
+.hist-sub + .hist-sub { margin-top: 1px; }
+
+/* ══ author search ══ */
+.tb-group.grow #searchInput { flex: 1.7 1 130px; }
+.author-field { flex: 1 1 150px; min-width: 138px; position: relative;
+  display: flex; align-items: center; }
+.author-field input {
+  width: 100%; padding: 7px 74px 7px 11px; border-radius: var(--r);
+  border: 1px solid var(--rule); background: var(--panel); color: var(--ink);
+}
+.author-field input:focus { border-color: var(--accent); outline: none; background: var(--bg); }
+.author-field input.bad { border-color: var(--danger); }
+.op-btn {
+  position: absolute; right: 6px; height: 26px; padding: 0 8px;
+  border: 1px solid var(--rule); background: var(--bg); color: var(--muted);
+  border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 700;
+  letter-spacing: .3px; line-height: 1;
+}
+.op-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.op-btn:disabled { opacity: .35; cursor: not-allowed; }
+.cm-author.au-hit { background: var(--hit); color: var(--hit-ink);
+  border-radius: 3px; padding: 0 3px; }
+.av-link { text-decoration: none; cursor: pointer; }
+.av-link:hover { box-shadow: 0 0 0 2px var(--accent); text-decoration: none; }
+
+</style>
+</head>
+<body>
+<!-- ══ onboarding ══ -->
+<div id="onboard" class="overlay hidden">
+  <div class="ob-card">
+    <div class="ob-step" data-step="theme">
+      <h1>Pick how it should look</h1>
+      <p class="sub">You can change this later in settings.</p>
+      <div class="theme-choices">
+        <button class="theme-choice" data-theme-pick="light">
+          <span class="swatch light"><i></i><i></i><i></i></span><span class="tc-name">Light</span>
+        </button>
+        <button class="theme-choice" data-theme-pick="dark">
+          <span class="swatch dark"><i></i><i></i><i></i></span><span class="tc-name">Dark</span>
+        </button>
+      </div>
+    </div>
+    <div class="ob-step hidden" data-step="key">
+      <h1>Add your API key</h1>
+      <p class="sub">This page talks to the YouTube API straight from your browser. The key is
+        stored on this computer and never sent anywhere else.</p>
+      <div class="key-row">
+        <input type="text" id="obKey" placeholder="API key" spellcheck="false" autocomplete="off">
+        <button class="btn primary" id="obSave">Save</button>
+      </div>
+      <div class="key-status" id="obStatus"></div>
+      <p class="sub">Don't have one?
+        <a href="https://developers.google.com/youtube/v3/getting-started" target="_blank" rel="noopener">Click here</a>
+      </p>
+      <button class="btn ghost small" id="obSkip">Skip for now</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ settings ══ -->
+<div id="settings" class="overlay hidden">
+  <div class="modal">
+    <header><h2>Settings</h2>
+      <button class="icon-btn" id="setClose" title="Close" aria-label="Close settings">✕</button>
+    </header>
+
+    <section>
+      <h3>API key</h3>
+      <p class="sub">Checked against the API before it's saved, so you know it works.</p>
+      <div class="current-key" id="currentKey"></div>
+      <div class="key-row">
+        <input type="text" id="setKey" placeholder="API key" spellcheck="false" autocomplete="off">
+        <button class="btn primary" id="setSave">Save</button>
+      </div>
+      <div class="key-status" id="setStatus"></div>
+      <p class="sub">
+        <a href="https://developers.google.com/youtube/v3/getting-started" target="_blank" rel="noopener">How to get a key</a>
+        · <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud credentials</a>
+      </p>
+    </section>
+
+    <section>
+      <h3>Theme</h3>
+      <div class="theme-choices compact">
+        <button class="theme-choice" data-theme-pick="light">
+          <span class="swatch light"><i></i><i></i><i></i></span><span class="tc-name">Light</span>
+        </button>
+        <button class="theme-choice" data-theme-pick="dark">
+          <span class="swatch dark"><i></i><i></i><i></i></span><span class="tc-name">Dark</span>
+        </button>
+      </div>
+    </section>
+
+    <section>
+      <h3>Stored data</h3>
+      <div id="storageStats"></div>
+      <p class="inline-note">When storage fills up, the oldest cached video is dropped
+        automatically. Its history entry stays and reopening it re-fetches.</p>
+    </section>
+  </div>
+</div>
+
+<!-- ══ confirm ══ -->
+<div id="confirm" class="overlay hidden">
+  <div class="modal narrow">
+    <h2 id="cfTitle">Are you sure?</h2>
+    <p class="sub" id="cfBody"></p>
+    <div class="row end gap">
+      <button class="btn ghost" id="cfNo">Cancel</button>
+      <button class="btn danger" id="cfYes">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ shell ══ -->
+<div id="shell">
+  <header id="topbar">
+    <div class="url-wrap">
+      <div class="url-field">
+        <input id="urlInput" type="text" spellcheck="false" autocomplete="off"
+               placeholder="YouTube video URL">
+        <button class="url-clear hidden" id="urlClear" data-tip="Clear" aria-label="Clear URL">
+          <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor"
+            d="M9 3h6l1 1h4v2H4V4h4l1-1zM6 7h12l-1 13a1 1 0 0 1-1 .95H8A1 1 0 0 1 7 20L6 7zm3.2 2.4.5 9h1.6l-.4-9H9.2zm4 0-.4 9h1.6l.5-9h-1.7z"/></svg>
+        </button>
+      </div>
+      <button class="btn primary" id="fetchBtn">Fetch</button>
+      <button class="btn ghost hidden" id="cancelBtn">Cancel</button>
+    </div>
+    <div class="top-right">
+      <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+      </button>
+      <button class="icon-btn" id="sideBtn" aria-label="Toggle history">
+        <svg id="sideIcon" viewBox="0 0 24 24" width="18" height="18"></svg>
+      </button>
+    </div>
+  </header>
+
+  <div id="progressWrap" class="hidden">
+    <div id="progressBar"><span id="progressFill"></span></div>
+    <div id="progressText"></div>
+  </div>
+
+  <div id="body">
+    <main id="main">
+      <div id="stickyTop">
+      <div id="toolbar" class="disabled">
+        <div class="tb-group">
+          <span class="tb-label">Sort</span>
+          <div class="segmented" id="sortSeg" role="group" aria-label="Sort comments">
+            <button data-sort="top" class="on">Top</button>
+            <button data-sort="newest">Newest</button>
+            <button data-sort="oldest">Oldest</button>
+          </div>
+        </div>
+        <div class="tb-group grow">
+          <input id="searchInput" type="text" spellcheck="false" autocomplete="off"
+                 placeholder="Search comments and replies">
+          <div class="author-field">
+            <input id="authorInput" type="text" spellcheck="false" autocomplete="off"
+                   placeholder="@author">
+            <button class="op-btn" id="opBtn" data-tip="Fill in the video creator" aria-label="Search the video creator">Creator</button>
+          </div>
+          <label class="check"><input type="checkbox" id="caseChk"><span>Aa</span><em>Case-sensitive</em></label>
+          <label class="check"><input type="checkbox" id="regexChk"><span>.*</span><em>Regex</em></label>
+        </div>
+        <div class="tb-group dates">
+          <span class="tb-label">From</span>
+          <div class="date-field">
+            <input id="fromInput" type="text" placeholder="YYYY-MM-DD" maxlength="10"
+                   spellcheck="false" autocomplete="off" inputmode="numeric">
+            <button class="cal-btn" data-cal="fromInput" title="Pick a date" aria-label="Pick start date">
+              <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M7 2v2h10V2h2v2h2a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h2V2h2zm13 8H4v10h16V10z"/></svg>
+            </button>
+          </div>
+          <span class="tb-label">To</span>
+          <div class="date-field">
+            <input id="toInput" type="text" placeholder="YYYY-MM-DD" maxlength="10"
+                   spellcheck="false" autocomplete="off" inputmode="numeric">
+            <button class="cal-btn" data-cal="toInput" title="Pick a date" aria-label="Pick end date">
+              <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M7 2v2h10V2h2v2h2a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h2V2h2zm13 8H4v10h16V10z"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="tb-group">
+          <button class="btn ghost" id="resetBtn">Reset</button>
+          <button class="btn primary" id="searchBtn">Search</button>
+          <div class="menu-wrap">
+            <button class="btn ghost" id="exportBtn">Export ▾</button>
+            <div class="menu hidden" id="exportMenu">
+              <button data-fmt="json">JSON</button>
+              <button data-fmt="html">Standalone HTML</button>
+              <button data-fmt="pdf">PDF</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="findBar" class="hidden">
+        <button class="find-nav" id="findPrev" data-tip="Previous match (Shift+Enter)" aria-label="Previous match">‹</button>
+        <button class="find-nav" id="findNext" data-tip="Next match (Enter)" aria-label="Next match">›</button>
+        <span class="find-count" id="findCount"></span>
+        <span class="find-extra" id="findExtra"></span>
+      </div>
+      </div>
+      <div id="printHead"></div>
+      <div id="videoHead" class="hidden"></div>
+
+      <div id="empty">
+        <div class="empty-inner">
+          <h2>Nothing loaded yet</h2>
+          <p>Fetching comments hits the YouTube API once,<br>everything else happens offline</p>
+        </div>
+      </div>
+
+      <div id="list"></div>
+      <div id="sentinel"></div>
+      <div id="listEnd" class="hidden"></div>
+    </main>
+
+    <aside id="sidebar">
+      <div class="side-head">
+        <h2>History</h2>
+        <input id="histSearch" type="text" placeholder="Filter by title" spellcheck="false" autocomplete="off">
+      </div>
+      <div id="histList"></div>
+      <div class="side-foot">
+        <button class="btn ghost danger-text" id="wipeHist">Wipe history</button>
+      </div>
+    </aside>
+  </div>
+
+  <footer id="quotabar">
+    <span class="q-status" id="statusText"></span>
+    <span class="q-spacer"></span>
+    <div class="s-meter" data-tip="Browser storage used by cached videos"><span class="s-fill" id="sFill"></span></div>
+    <span id="sText"></span>
+  </footer>
+</div>
+
+<div id="calPop" class="cal hidden"></div>
+<div id="ctxMenu" class="ctx hidden"></div>
+<div id="toast" class="toast hidden"></div>
+<div id="tip" class="tip hidden"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   YouTube Comment Explorer — standalone browser build
+   No server, no install. Talks to the YouTube Data API directly.
+   ══════════════════════════════════════════════════════════ */
+'use strict';
+
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+const API = 'https://www.googleapis.com/youtube/v3';
+const NS = 'ytce.';                        // localStorage prefix
+
+/* ── state ─────────────────────────────────────────────── */
+const S = {
+  payload: null, threads: [], view: [], sort: 'top',
+  rendered: 0, chunk: 40, history: [],
+  fetching: false, abort: null, matcher: null, authorMatcher: null, activeFilter: null,
+  matches: [], matchIdx: -1, opHandle: null,
+};
+
+/* ══ storage ═══════════════════════════════════════════════
+   localStorage caps a page at roughly 5 MB, so cached videos are
+   packed (author table + epoch seconds + tuples) and the oldest is
+   evicted when a write overflows.                                */
+const LS = {
+  get(k, d) {
+    try { const v = localStorage.getItem(NS + k); return v === null ? d : JSON.parse(v); }
+    catch { return d; }
+  },
+  set(k, v) {
+    try { localStorage.setItem(NS + k, JSON.stringify(v)); return true; }
+    catch (e) { return false; }
+  },
+  del(k) { try { localStorage.removeItem(NS + k); } catch {} },
+  keys() {
+    const out = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(NS)) out.push(k.slice(NS.length));
+      }
+    } catch {}
+    return out;
+  },
+  bytes() {
+    let n = 0;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(NS)) n += k.length + (localStorage.getItem(k) || '').length;
+      }
+    } catch {}
+    return n * 2;                          // UTF-16 code units
+  },
+};
+
+const secs = (iso) => Math.floor(new Date(iso).getTime() / 1000) || 0;
+const iso = (s) => new Date(s * 1000).toISOString().replace('.000', '');
+
+function pack(p) {
+  const authors = [];
+  const idx = new Map();
+  const key = (c) => c.channelId + '\u0000' + c.author;
+  const aidx = (c) => {
+    const k = key(c);
+    if (!idx.has(k)) { idx.set(k, authors.length); authors.push([c.author, c.channelId]); }
+    return idx.get(k);
+  };
+  const pos = new Map();
+  p.comments.forEach((c, i) => pos.set(c.id, i));
+  return {
+    v: 1,
+    m: { videoId: p.videoId, title: p.title, channelTitle: p.channelTitle,
+         channelId: p.channelId, thumbnail: p.thumbnail, publishedAt: p.publishedAt,
+         reportedCommentCount: p.reportedCommentCount, videoLikeCount: p.videoLikeCount,
+         creatorHandle: p.creatorHandle,
+         fetchedAt: p.fetchedAt,
+         topLevelCount: p.topLevelCount,
+         replyCount: p.replyCount, fetchedCount: p.fetchedCount },
+    a: authors,
+    c: p.comments.map((c) => [
+      c.id, aidx(c), c.text, c.likeCount, secs(c.publishedAt),
+      c.updatedAt && c.updatedAt !== c.publishedAt ? secs(c.updatedAt) : 0,
+      c.parentId ? (pos.has(c.parentId) ? pos.get(c.parentId) : -1) : -1,
+    ]),
+  };
+}
+
+function unpack(d) {
+  const ids = d.c.map((t) => t[0]);
+  return {
+    ...d.m,
+    comments: d.c.map((t) => ({
+      id: t[0], parentId: t[6] >= 0 ? ids[t[6]] : null,
+      author: d.a[t[1]][0], channelId: d.a[t[1]][1],
+      text: t[2], likeCount: t[3],
+      publishedAt: iso(t[4]), updatedAt: t[5] ? iso(t[5]) : iso(t[4]),
+    })),
+  };
+}
+
+/* Video cache. IndexedDB where the browser allows it from file:// (hundreds of
+   MB), otherwise localStorage (~5 MB, so roughly two large videos). The mode is
+   detected once at boot and shown in settings; callers don't care which is live. */
+const DB = {
+  mode: 'localStorage', db: null, ids: new Set(),
+
+  async init() {
+    try {
+      this.db = await new Promise((res, rej) => {
+        if (!window.indexedDB) return rej(new Error('unavailable'));
+        const r = indexedDB.open('ytce', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('videos');
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error || new Error('open failed'));
+        r.onblocked = () => rej(new Error('blocked'));
+        setTimeout(() => rej(new Error('timeout')), 4000);
+      });
+      await this._tx('readonly', (s) => s.getAllKeys());   // prove it's usable
+      this.mode = 'indexeddb';
+    } catch {
+      this.mode = 'localStorage';
+      this.db = null;
+    }
+    await this.refresh();
+    return this.mode;
+  },
+
+  _tx(mode, fn) {
+    return new Promise((res, rej) => {
+      const t = this.db.transaction('videos', mode);
+      const req = fn(t.objectStore('videos'));
+      t.onerror = () => rej(t.error);
+      t.onabort = () => rej(t.error || new Error('aborted'));
+      if (req) { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }
+      else t.oncomplete = () => res(true);
+    });
+  },
+
+  async refresh() {
+    if (this.mode === 'indexeddb') {
+      try { this.ids = new Set(await this._tx('readonly', (s) => s.getAllKeys())); }
+      catch { this.ids = new Set(); }
+    } else {
+      this.ids = new Set(LS.keys().filter((k) => k.startsWith('vid.')).map((k) => k.slice(4)));
+    }
+    return this.ids;
+  },
+
+  has(id) { return this.ids.has(id); },
+
+  async get(id) {
+    if (this.mode === 'indexeddb') {
+      try { return (await this._tx('readonly', (s) => s.get(id))) || null; }
+      catch { return null; }
+    }
+    return LS.get('vid.' + id, null);
+  },
+
+  async del(id) {
+    if (this.mode === 'indexeddb') { try { await this._tx('readwrite', (s) => s.delete(id)); } catch {} }
+    else LS.del('vid.' + id);
+    this.ids.delete(id);
+  },
+
+  /* Returns 'ok' | 'evicted' | 'full'. Evicts oldest-fetched entries on overflow. */
+  async put(id, packed) {
+    let evicted = false;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      let stored = false;
+      if (this.mode === 'indexeddb') {
+        try { await this._tx('readwrite', (s) => s.put(packed, id)); stored = true; } catch {}
+      } else {
+        stored = LS.set('vid.' + id, packed);
+      }
+      if (stored) { this.ids.add(id); return evicted ? 'evicted' : 'ok'; }
+
+      const victim = S.history
+        .filter((h) => h.videoId !== id && this.ids.has(h.videoId))
+        .sort((a, b) => (a.fetchedAt < b.fetchedAt ? -1 : 1))[0];
+      if (!victim) return 'full';
+      await this.del(victim.videoId);
+      evicted = true;
+    }
+    return 'full';
+  },
+
+  async clear() {
+    if (this.mode === 'indexeddb') { try { await this._tx('readwrite', (s) => s.clear()); } catch {} }
+    else LS.keys().filter((k) => k.startsWith('vid.')).forEach((k) => LS.del(k));
+    this.ids.clear();
+  },
+
+  async usage() {
+    if (this.mode === 'indexeddb' && navigator.storage && navigator.storage.estimate) {
+      try {
+        const e = await navigator.storage.estimate();
+        return { used: e.usage || 0, cap: e.quota || 0, exact: true };
+      } catch {}
+    }
+    return { used: LS.bytes(), cap: 5 * 1024 * 1024, exact: false };
+  },
+};
+
+async function cacheVideo(p) { return DB.put(p.videoId, pack(p)); }
+
+/* ══ API ═══════════════════════════════════════════════════ */
+class ApiError extends Error {
+  constructor(msg, reason) { super(msg); this.reason = reason || ''; }
+}
+const REASONS = {
+  commentsDisabled: 'Comments are disabled on this video.',
+  videoNotFound: "That video doesn't exist or isn't public.",
+  quotaExceeded: 'Daily quota exhausted. It resets at midnight Pacific Time.',
+  rateLimitExceeded: 'Rate limited. Wait a moment and try again.',
+  keyInvalid: "That API key isn't valid.",
+  ipRefererBlocked: "The key is restricted and is blocking this page. Set Application " +
+                    "restrictions to 'None' in Google Cloud Console.",
+  accessNotConfigured: "YouTube Data API v3 isn't enabled for this key's project.",
+  forbidden: 'The API refused the request. Check the key allows YouTube Data API v3.',
+};
+
+async function apiGet(endpoint, params, signal) {
+  const key = LS.get('apiKey', '');
+  const qs = new URLSearchParams({ ...params, key });
+  for (const [k, v] of [...qs]) if (v === '' || v === 'undefined') qs.delete(k);
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    let r;
+    try {
+      r = await fetch(`${API}/${endpoint}?${qs}`, { signal });
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      if (attempt === 4) throw new ApiError('Network error — check your connection.');
+      await sleep(600 * 2 ** attempt, signal);
+      continue;
+    }
+    if (r.ok) return r.json();
+
+    let reason = '', message = `HTTP ${r.status}`;
+    try {
+      const j = await r.json();
+      reason = ((j.error && j.error.errors) || [{}])[0].reason || '';
+      message = (j.error && j.error.message) || message;
+    } catch {}
+
+    if ([500, 502, 503, 504].includes(r.status) || reason === 'backendError') {
+      if (attempt === 4) throw new ApiError(message, reason);
+      await sleep(600 * 2 ** attempt, signal);
+      continue;
+    }
+    throw new ApiError(REASONS[reason] || `${message} (${r.status}${reason ? ', ' + reason : ''})`, reason);
+  }
+  throw new ApiError('Request failed after several retries.');
+}
+
+const sleep = (ms, signal) => new Promise((res, rej) => {
+  const t = setTimeout(res, ms);
+  if (signal) signal.addEventListener('abort',
+    () => { clearTimeout(t); rej(new DOMException('aborted', 'AbortError')); }, { once: true });
+});
+
+const ID_RE = /^[A-Za-z0-9_-]{11}$/;
+function videoId(text) {
+  text = (text || '').trim();
+  if (!text) throw new ApiError('Enter a YouTube video URL.');
+  if (ID_RE.test(text)) return text;
+  let u;
+  try { u = new URL(text.includes('//') ? text : 'https://' + text); }
+  catch { throw new ApiError("That doesn't look like a URL."); }
+  const host = u.hostname.toLowerCase().replace(/^www\./, '').replace(/^m\./, '');
+  const parts = u.pathname.split('/').filter(Boolean);
+  let id;
+  if (host === 'youtu.be') id = parts[0];
+  else if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+    if (u.searchParams.get('v')) id = u.searchParams.get('v');
+    else if (parts.length > 1 && ['shorts', 'embed', 'live', 'v'].includes(parts[0])) id = parts[1];
+    else throw new ApiError("Couldn't find a video ID in that URL.");
+  } else throw new ApiError("That's not a YouTube URL.");
+  if (!ID_RE.test(id || '')) throw new ApiError(`Extracted “${id}”, which isn't a valid video ID.`);
+  return id;
+}
+
+const norm = (c, parentId) => ({
+  id: c.id, parentId,
+  author: (c.snippet && c.snippet.authorDisplayName) || '',
+  channelId: (c.snippet && c.snippet.authorChannelId && c.snippet.authorChannelId.value) || '',
+  text: (c.snippet && (c.snippet.textOriginal || c.snippet.textDisplay)) || '',
+  likeCount: (c.snippet && c.snippet.likeCount) || 0,
+  publishedAt: (c.snippet && c.snippet.publishedAt) || '',
+  updatedAt: (c.snippet && c.snippet.updatedAt) || '',
+});
+
+async function fetchAll(vid, signal, onProgress) {
+  const meta = await apiGet('videos', { part: 'snippet,statistics', id: vid }, signal);
+  if (!meta.items || !meta.items.length)
+    throw new ApiError("No such video, or it's private or deleted.");
+  const v = meta.items[0];
+  const expected = v.statistics && v.statistics.commentCount != null
+    ? +v.statistics.commentCount : null;
+  const videoLikes = v.statistics && v.statistics.likeCount != null
+    ? +v.statistics.likeCount : null;
+
+  // snippet.customUrl is the channel's @handle. It comes back lowercased, so a
+  // handle taken from a real comment is preferred later where one exists.
+  let creatorHandle = null;
+  try {
+    const ch = await apiGet('channels', { part: 'snippet', id: v.snippet.channelId }, signal);
+    const cu = ch.items && ch.items[0] && ch.items[0].snippet.customUrl;
+    if (cu) creatorHandle = cu.startsWith('@') ? cu : '@' + cu;
+  } catch (e) {
+    if (e.name === 'AbortError') throw e;
+    // A missing handle is not worth failing the whole fetch over.
+  }
+  onProgress({ phase: 'video', message: v.snippet.title });
+
+  // phase 1 — every top-level thread
+  const threads = [];
+  let token;
+  do {
+    const d = await apiGet('commentThreads', {
+      part: 'snippet,replies', videoId: vid, maxResults: 100,
+      order: 'time', textFormat: 'plainText', pageToken: token || '',
+    }, signal);
+    threads.push(...(d.items || []));
+    token = d.nextPageToken;
+    const counted = threads.reduce((n, t) => n + 1 + (t.snippet.totalReplyCount || 0), 0);
+    onProgress({ phase: 'threads', fetched: counted, expected, threads: threads.length });
+  } while (token);
+
+  // phase 2 — expand threads whose inline preview is short
+  const comments = threads.map((t) => norm(t.snippet.topLevelComment, null));
+  const repliesBy = new Map();
+  const needs = threads.filter((t) =>
+    (t.snippet.totalReplyCount || 0) > ((t.replies && t.replies.comments) || []).length);
+  let done = 0;
+
+  for (const t of threads) {
+    const tid = t.snippet.topLevelComment.id;
+    const total = t.snippet.totalReplyCount || 0;
+    const preview = (t.replies && t.replies.comments) || [];
+    if (!total) continue;
+    if (preview.length >= total) { repliesBy.set(tid, preview.map((c) => norm(c, tid))); continue; }
+
+    const acc = [];
+    let rtok;
+    do {
+      const d = await apiGet('comments', {
+        part: 'snippet', parentId: tid, maxResults: 100,
+        textFormat: 'plainText', pageToken: rtok || '',
+      }, signal);
+      acc.push(...(d.items || []).map((c) => norm(c, tid)));
+      rtok = d.nextPageToken;
+    } while (rtok);
+    repliesBy.set(tid, acc);
+    done++;
+    const got = comments.length + [...repliesBy.values()].reduce((n, a) => n + a.length, 0);
+    onProgress({ phase: 'replies', fanout_done: done, fanout_total: needs.length,
+                 fetched: got, expected });
+  }
+
+  for (const arr of repliesBy.values()) {
+    arr.sort((a, b) => (a.publishedAt < b.publishedAt ? -1 : 1));
+    comments.push(...arr);
+  }
+
+  const payload = {
+    videoId: vid, title: v.snippet.title, channelTitle: v.snippet.channelTitle,
+    channelId: v.snippet.channelId, publishedAt: v.snippet.publishedAt,
+    thumbnail: ((v.snippet.thumbnails || {}).medium || (v.snippet.thumbnails || {}).default || {}).url || '',
+    reportedCommentCount: expected, videoLikeCount: videoLikes, creatorHandle,
+    fetchedAt: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
+    topLevelCount: threads.length,
+    replyCount: [...repliesBy.values()].reduce((n, a) => n + a.length, 0),
+    fetchedCount: comments.length, comments,
+  };
+  onProgress({ phase: 'done', fetched: comments.length, expected });
+  return payload;
+}
+
+/* ══ boot ══════════════════════════════════════════════════ */
+async function boot() {
+  await DB.init();
+  const theme = LS.get('theme', null);
+  applyTheme(theme || 'dark');
+  S.sort = LS.get('sort', 'top');
+  markSort();
+  S.history = LS.get('history', []);
+  paintHistory();
+  paintStorage();
+  $('#sidebar').classList.toggle('collapsed', !LS.get('sidebarOpen', true));
+  paintSideIcon();
+  const hasKey = !!LS.get('apiKey', '');
+  paintKeyState(hasKey);
+
+  if (!theme || !LS.get('onboarded', false)) {
+    $('#onboard').classList.remove('hidden');
+    if (theme) showStep('key');
+  } else if (!hasKey) {
+    $('#onboard').classList.remove('hidden');
+    showStep('key');
+  }
+  $('#urlInput').focus();
+}
+
+/* ── theme ─────────────────────────────────────────────── */
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  $$('.theme-choice').forEach((el) => el.classList.toggle('on', el.dataset.themePick === t));
+}
+$$('[data-theme-pick]').forEach((el) => el.addEventListener('click', () => {
+  const t = el.dataset.themePick;
+  applyTheme(t); LS.set('theme', t);
+  if (el.closest('#onboard')) showStep('key');
+}));
+function showStep(name) {
+  $$('#onboard .ob-step').forEach((s) => s.classList.toggle('hidden', s.dataset.step !== name));
+  if (name === 'key') setTimeout(() => $('#obKey').focus(), 60);
+}
+
+/* ── API key ───────────────────────────────────────────── */
+function paintKeyState(has) {
+  const box = $('#currentKey');
+  const k = LS.get('apiKey', '');
+  if (has && k) {
+    box.className = 'current-key';
+    box.innerHTML = `<span class="dot"></span><span class="key-text">${esc(k)}</span>
+      <button class="icon-btn key-copy" id="keyCopy" data-tip="Copy to clipboard">⧉</button>
+      <span class="key-active">Active</span>`;
+    const c = $('#keyCopy');
+    if (c) c.addEventListener('click', () => copy(k, 'Key copied.'));
+  } else {
+    box.className = 'current-key none';
+    box.innerHTML = `<span class="dot"></span><span>No key saved yet</span>`;
+  }
+}
+async function saveKey(input, statusEl, after) {
+  const key = input.value.trim();
+  if (!key) { statusEl.className = 'key-status err'; statusEl.textContent = 'Enter a key first.'; return; }
+  if (key.length < 20 || /\s/.test(key)) {
+    statusEl.className = 'key-status err';
+    statusEl.textContent = "That doesn't look like a Google API key."; return;
+  }
+  statusEl.className = 'key-status busy';
+  statusEl.innerHTML = '<span class="spinner"></span>Checking the key against the API…';
+  const prev = LS.get('apiKey', '');
+  LS.set('apiKey', key);
+  try {
+    await apiGet('videos', { part: 'snippet', id: 'dQw4w9WgXcQ' });
+    statusEl.className = 'key-status ok';
+    statusEl.textContent = 'Key verified and saved.';
+    input.value = '';
+    paintKeyState(true);
+    if (after) after();
+  } catch (e) {
+    LS.set('apiKey', prev);
+    statusEl.className = 'key-status err';
+    statusEl.textContent = e.message;
+  }
+}
+$('#obSave').addEventListener('click', () =>
+  saveKey($('#obKey'), $('#obStatus'), () => setTimeout(finishOnboard, 700)));
+$('#obKey').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#obSave').click(); });
+$('#obSkip').addEventListener('click', finishOnboard);
+function finishOnboard() {
+  LS.set('onboarded', true);
+  $('#onboard').classList.add('hidden');
+  $('#urlInput').focus();
+}
+$('#setSave').addEventListener('click', () => saveKey($('#setKey'), $('#setStatus')));
+$('#setKey').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#setSave').click(); });
+$('#settingsBtn').addEventListener('click', () => {
+  $('#setStatus').textContent = ''; paintStorage();
+  $('#settings').classList.remove('hidden');
+});
+$('#setClose').addEventListener('click', () => $('#settings').classList.add('hidden'));
+$('#settings').addEventListener('mousedown', (e) => {
+  if (e.target.id === 'settings') $('#settings').classList.add('hidden');
+});
+
+/* ── meters ────────────────────────────────────────────── */
+async function paintStorage() {
+  const u = await DB.usage();
+  const mb = (n) => (n / 1048576).toFixed(n < 10485760 ? 2 : 0);
+  const pct = u.cap ? Math.min(100, (u.used / u.cap) * 100) : 0;
+  const f = $('#sFill');
+  f.style.width = pct + '%';
+  f.className = 's-fill' + (pct > 85 ? ' high' : pct > 60 ? ' mid' : '');
+  $('#sText').textContent = `${mb(u.used)} MB stored`;
+  const stats = $('#storageStats');
+  if (stats) stats.innerHTML =
+    `<div class="kv"><span>Storage backend</span><span>${
+       DB.mode === 'indexeddb' ? 'IndexedDB (large)' : 'localStorage (~5 MB)'}</span></div>
+     <div class="kv"><span>Cached videos</span><span>${DB.ids.size}</span></div>
+     <div class="kv"><span>History entries</span><span>${S.history.length}</span></div>
+     <div class="kv"><span>Space used</span><span>${mb(u.used)} MB${
+       u.cap ? ' of ' + mb(u.cap) + ' MB' : ''}</span></div>`;
+}
+
+/* ── fetching ──────────────────────────────────────────── */
+$('#fetchBtn').addEventListener('click', startFetch);
+$('#urlInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') startFetch(); });
+$('#urlInput').addEventListener('input', paintUrlClear);
+$('#urlClear').addEventListener('click', () => {
+  $('#urlInput').value = '';
+  paintUrlClear();
+  $('#urlInput').focus();
+});
+function paintUrlClear() {
+  $('#urlClear').classList.toggle('hidden', !$('#urlInput').value);
+}
+function setUrl(v) { $('#urlInput').value = v; paintUrlClear(); }
+$('#cancelBtn').addEventListener('click', () => {
+  if (S.abort) S.abort.abort();
+  status('Cancelling…');
+});
+
+async function startFetch() {
+  if (S.fetching) return;
+  if (!LS.get('apiKey', '')) { toast('Add an API key in settings first.', 'err'); return; }
+  let vid;
+  try { vid = videoId($('#urlInput').value); }
+  catch (e) { toast(e.message, 'err'); return; }
+
+  S.fetching = true;
+  S.abort = new AbortController();
+  $('#fetchBtn').classList.add('hidden');
+  $('#cancelBtn').classList.remove('hidden');
+  $('#urlInput').disabled = true;
+  $('#progressWrap').classList.remove('hidden');
+  $('#progressFill').classList.add('indet');
+  $('#progressFill').style.width = '';
+  $('#progressText').textContent = 'Looking up the video…';
+
+  try {
+    const payload = await fetchAll(vid, S.abort.signal, onProgress);
+    loadPayload(payload);
+    const stored = await cacheVideo(payload);
+    S.history = [{ videoId: payload.videoId, title: payload.title,
+                   channelTitle: payload.channelTitle, thumbnail: payload.thumbnail,
+                   fetchedAt: payload.fetchedAt, count: payload.fetchedCount,
+                   reported: payload.reportedCommentCount },
+                 ...S.history.filter((h) => h.videoId !== payload.videoId)];
+    LS.set('history', S.history);
+    paintHistory(); paintStorage();
+    if (stored === 'full') {
+      toast('Too large to cache — reopening this video later will re-fetch it.', 'err');
+    } else if (stored === 'evicted') {
+      toast('An older cached video was dropped to make room.', 'err');
+    }
+  } catch (e) {
+    $('#progressWrap').classList.add('hidden');
+    if (e.name === 'AbortError') toast('Fetch cancelled.');
+    else toast(e.message || 'Fetch failed.', 'err');
+  } finally {
+    S.fetching = false; S.abort = null;
+    $('#fetchBtn').classList.remove('hidden');
+    $('#cancelBtn').classList.add('hidden');
+    $('#urlInput').disabled = false;
+    setTimeout(() => $('#progressWrap').classList.add('hidden'), 1400);
+  }
+}
+
+let progressFloor = 0;
+const PHASE1_SHARE = 0.7;   // reading threads is most of the work
+
+function onProgress(p) {
+  const fill = $('#progressFill'), txt = $('#progressText');
+  if (p.phase === 'video') {
+    progressFloor = 0;
+    txt.textContent = 'Starting…';
+    return;
+  }
+  if (p.phase === 'done') {
+    fill.classList.remove('indet');
+    fill.style.width = '100%';
+    txt.textContent = '100%';
+    return;
+  }
+
+  let pct = null;
+  if (p.phase === 'threads' && p.expected > 0) {
+    pct = (p.fetched / p.expected) * PHASE1_SHARE * 100;
+  } else if (p.phase === 'replies' && p.fanout_total > 0) {
+    pct = (PHASE1_SHARE + (p.fanout_done / p.fanout_total) * (1 - PHASE1_SHARE)) * 100;
+  } else if (p.phase === 'replies') {
+    pct = PHASE1_SHARE * 100;
+  }
+
+  if (pct === null) {
+    // No published comment count, so nothing to take a percentage of.
+    txt.textContent = p.fetched.toLocaleString() + ' comments';
+    return;
+  }
+  // Never let the bar travel backwards, whatever the estimates do.
+  progressFloor = Math.max(progressFloor, Math.min(99, Math.floor(pct)));
+  fill.classList.remove('indet');
+  fill.style.width = progressFloor + '%';
+  txt.textContent = progressFloor + '%';
+}
+
+/* ── payload → threads ─────────────────────────────────── */
+const cmpDate = (a, b) => (a.publishedAt < b.publishedAt ? -1 : a.publishedAt > b.publishedAt ? 1 : 0);
+
+function loadPayload(payload) {
+  S.payload = payload;
+  const tops = [], byParent = new Map();
+  for (const c of payload.comments) {
+    if (c.parentId) {
+      if (!byParent.has(c.parentId)) byParent.set(c.parentId, []);
+      byParent.get(c.parentId).push(c);
+    } else tops.push(c);
+  }
+  for (const arr of byParent.values()) arr.sort(cmpDate);   // replies always oldest-first
+  S.threads = tops.map((c) => ({ comment: c, replies: byParent.get(c.id) || [] }));
+
+  $('#empty').classList.add('hidden');
+  $('#toolbar').classList.remove('disabled');
+  paintVideoHead();
+  resetFields();
+  paintOpButton();
+  applyView();
+  $('#main').scrollTop = 0;
+}
+
+function paintVideoHead() {
+  const p = S.payload, rep = p.reportedCommentCount;
+  let note = '';
+  if (rep != null && rep !== p.fetchedCount) {
+    const d = rep - p.fetchedCount;
+    note = `<span class="vh-warn">YouTube reports ${rep.toLocaleString()} — ` +
+      `${Math.abs(d).toLocaleString()} ${d > 0 ? 'not returned by the API' : 'more than reported'}</span>`;
+  }
+  $('#videoHead').innerHTML = `
+    ${p.thumbnail ? `<img class="vh-thumb" src="${esc(p.thumbnail)}" alt="">` : ''}
+    <div>
+      <h1>${esc(p.title)}</h1>
+      <div class="vh-meta">
+        <a href="https://www.youtube.com/channel/${esc(p.channelId)}" target="_blank" rel="noopener">${esc(p.channelTitle)}</a>
+        · <a href="https://www.youtube.com/watch?v=${esc(p.videoId)}" target="_blank" rel="noopener">watch on YouTube</a><br>
+        ${p.publishedAt ? `Uploaded <span class="vh-age" data-tip="${esc(fmtUTC(p.publishedAt))}"
+          >${relAge(p.publishedAt)}</span><br>` : ''}
+        ${p.videoLikeCount != null
+          ? `<span class="vh-likes">${THUMB}${p.videoLikeCount.toLocaleString()}</span> · ` : ''
+        }${p.fetchedCount.toLocaleString()} comments${note ? '<br>' + note : ''}
+      </div>
+    </div>`;
+  $('#videoHead').classList.remove('hidden');
+}
+
+/* ── sorting ───────────────────────────────────────────── */
+$('#sortSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-sort]');
+  if (!b) return;
+  S.sort = b.dataset.sort; LS.set('sort', S.sort);
+  markSort(); applyView(); $('#main').scrollTop = 0;
+});
+function markSort() {
+  $$('#sortSeg button').forEach((b) => b.classList.toggle('on', b.dataset.sort === S.sort));
+}
+function sortThreads(list) {
+  const a = list.slice();
+  if (S.sort === 'top')
+    a.sort((x, y) => (y.comment.likeCount - x.comment.likeCount) || -cmpDate(x.comment, y.comment));
+  else if (S.sort === 'newest') a.sort((x, y) => -cmpDate(x.comment, y.comment));
+  else a.sort((x, y) => cmpDate(x.comment, y.comment));
+  return a;
+}
+
+/* ── search & filters ──────────────────────────────────── */
+/* The creator's @handle. A handle taken from one of their own comments is used
+   first since it is certain to appear in the data; otherwise the one from
+   channels.list. channelTitle is deliberately not a fallback — it is a display
+   name ("Chris the Producer"), not a handle, so it would match nothing. */
+function findOpHandle() {
+  if (!S.payload) return null;
+  const owner = S.payload.channelId;
+  if (owner) {
+    for (const c of S.payload.comments) if (c.channelId === owner && c.author) return c.author;
+  }
+  return S.payload.creatorHandle || null;
+}
+function paintOpButton() {
+  const btn = $('#opBtn');
+  S.opHandle = findOpHandle();
+  btn.disabled = !S.opHandle;
+  btn.dataset.tip = S.opHandle
+    ? `Search comments by ${S.opHandle}`
+    : 'No creator handle available for this video';
+}
+/* Fills the author box only — filtering still waits for Search or Enter.
+   The field is narrow, so park the caret at the start: focusing otherwise
+   scrolls to the end of the handle and hides the part that identifies it. */
+function setAuthorField(handle) {
+  const el = $('#authorInput');
+  el.value = handle;
+  el.classList.remove('bad');
+  el.focus();
+  try { el.setSelectionRange(0, 0); } catch {}
+  el.scrollLeft = 0;
+}
+$('#opBtn').addEventListener('click', () => {
+  if (S.opHandle) setAuthorField(S.opHandle);
+});
+
+$('#searchBtn').addEventListener('click', applySearch);
+['searchInput', 'authorInput', 'fromInput', 'toInput'].forEach((id) =>
+  $('#' + id).addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const f = S.activeFilter;
+    const unchanged = f && id === 'searchInput' && f.query === $('#searchInput').value &&
+      f.regex === $('#regexChk').checked && f.caseSensitive === $('#caseChk').checked;
+    if (unchanged && S.matches.length) gotoMatch(S.matchIdx + (e.shiftKey ? -1 : 1));
+    else applySearch();
+  }));
+$('#resetBtn').addEventListener('click', resetSearch);
+
+const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+function validDate(v) {
+  if (!ISO_RE.test(v)) return false;
+  const [y, m, d] = v.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+function applySearch() {
+  if (!S.payload) return;
+  const q = $('#searchInput').value;
+  // Only surrounding whitespace goes — a leading @ is part of the handle.
+  const author = $('#authorInput').value.trim();
+  const useRegex = $('#regexChk').checked, cs = $('#caseChk').checked;
+  let from = $('#fromInput').value.trim(), to = $('#toInput').value.trim();
+  ['#fromInput', '#toInput', '#searchInput', '#authorInput']
+    .forEach((s) => $(s).classList.remove('bad'));
+
+  if (from && !validDate(from)) { $('#fromInput').classList.add('bad'); toast('From must be YYYY-MM-DD.', 'err'); return; }
+  if (to && !validDate(to)) { $('#toInput').classList.add('bad'); toast('To must be YYYY-MM-DD.', 'err'); return; }
+  if (from && !to) { to = todayISO(); $('#toInput').value = to; }
+  if (to && !from) {
+    let oldest = null;
+    for (const c of S.payload.comments) if (!oldest || c.publishedAt < oldest) oldest = c.publishedAt;
+    from = (oldest || '1970-01-01').slice(0, 10);
+    $('#fromInput').value = from;
+  }
+  if (from && to && from > to) { toast('From is after To.', 'err'); return; }
+
+  let matcher = null;
+  if (q) {
+    try { matcher = new RegExp(useRegex ? q : escRe(q), cs ? 'g' : 'gi'); }
+    catch (err) {
+      $('#searchInput').classList.add('bad');
+      toast('Invalid regex: ' + err.message, 'err');
+      return;
+    }
+  }
+  // Author matching is a plain case-sensitive substring test: the Aa and .*
+  // toggles govern the text field only.
+  // Always literal and case-insensitive, whatever the Aa / .* toggles say.
+  // YouTube handles are unique regardless of case (every casing of a handle
+  // resolves to the same channel), and channels.list lowercases customUrl while
+  // comment display names keep the author's own casing — so matching on case
+  // would make the Creator button find nothing.
+  const authorMatcher = author ? new RegExp(escRe(author), 'i') : null;
+
+  S.matcher = matcher;
+  S.authorMatcher = authorMatcher;
+  S.activeFilter = (q || author || from || to)
+    ? { query: q, author, regex: useRegex, caseSensitive: cs, from, to } : null;
+  applyView();
+  $('#main').scrollTop = 0;
+  if (S.matches.length) gotoMatch(0, false);
+}
+
+function resetFields() {
+  $('#searchInput').value = ''; $('#authorInput').value = '';
+  $('#fromInput').value = ''; $('#toInput').value = '';
+  $('#caseChk').checked = false; $('#regexChk').checked = false;
+  ['#searchInput', '#authorInput', '#fromInput', '#toInput']
+    .forEach((s) => $(s).classList.remove('bad'));
+  S.matcher = null; S.authorMatcher = null; S.activeFilter = null;
+}
+function resetSearch() {                    // sort is deliberately preserved
+  resetFields(); applyView(); $('#main').scrollTop = 0;
+}
+
+function hits(t) { if (!S.matcher) return false; S.matcher.lastIndex = 0; return S.matcher.test(t || ''); }
+
+function applyView() {
+  let list = S.threads;
+  const f = S.activeFilter;
+  if (f) {
+    const lo = f.from ? f.from + 'T00:00:00.000Z' : null;
+    const hi = f.to ? f.to + 'T23:59:59.999Z' : null;
+    const inRange = (c) => (!lo || c.publishedAt >= lo) && (!hi || c.publishedAt <= hi);
+    const byAuthor = (c) => !S.authorMatcher || S.authorMatcher.test(c.author || '');
+    const ok = (c) => (!S.matcher || hits(c.text)) && byAuthor(c) && inRange(c);
+    list = S.threads.filter((t) => ok(t.comment) || t.replies.some(ok));
+  }
+  S.view = sortThreads(list);
+  buildMatchIndex();
+  paintFindBar();
+  renderReset();
+}
+
+/* Flat list of every highlight in view order, so prev/next can walk them. */
+function buildMatchIndex() {
+  S.matches = [];
+  S.matchIdx = -1;
+  if (!S.matcher) return;
+  S.view.forEach((t, ti) => {
+    const scan = (c) => {
+      const n = countHits(c.text || '');
+      for (let k = 0; k < n; k++) S.matches.push({ ti, cid: c.id, k });
+    };
+    scan(t.comment);
+    t.replies.forEach(scan);
+  });
+}
+
+function gotoMatch(i, smooth) {
+  if (!S.matches.length) return;
+  const len = S.matches.length;
+  S.matchIdx = ((i % len) + len) % len;
+  const m = S.matches[S.matchIdx];
+
+  while (S.rendered <= m.ti && S.rendered < S.view.length) renderMore();
+
+  const host = $('#list').querySelector(`[data-cid="${cssEscape(m.cid)}"]`);
+  if (!host) { paintFindBar(); return; }
+
+  // A user-collapsed thread must open so the hit is actually visible.
+  const wrap = host.closest('.thread');
+  const rw = wrap && wrap.querySelector('.rep-wrap');
+  if (rw && rw.classList.contains('collapsed')) setCollapsed(rw, false);
+  const more = wrap && wrap.querySelector('.rep-toggle');
+  if (more && host.closest('.rep-box') && !host.offsetParent) more.click();
+
+  const marks = host.querySelectorAll('mark');
+  const target = marks[m.k] || marks[0] || host;
+  $$('#list mark.active').forEach((x) => x.classList.remove('active'));
+  if (target.tagName === 'MARK') target.classList.add('active');
+  target.scrollIntoView({ block: 'center', behavior: smooth === false ? 'auto' : 'smooth' });
+  paintFindBar();
+}
+
+const cssEscape = (v) => (window.CSS && CSS.escape) ? CSS.escape(v)
+  : String(v).replace(/[^a-zA-Z0-9_-]/g, (c) => '\\' + c);
+
+function paintFindBar() {
+  const bar = $('#findBar');
+  const f = S.activeFilter;
+  if (!f) { bar.classList.add('hidden'); return; }
+
+  const hasText = !!f.query;
+  const total = S.matches.length;
+  $('#findPrev').classList.toggle('hidden', !hasText);
+  $('#findNext').classList.toggle('hidden', !hasText);
+  $('#findPrev').disabled = total === 0;
+  $('#findNext').disabled = total === 0;
+
+  if (hasText) {
+    $('#findCount').textContent = total
+      ? `${(S.matchIdx + 1).toLocaleString()} of ${total.toLocaleString()}`
+      : 'No matches';
+    $('#findCount').classList.toggle('none', total === 0);
+  } else {
+    const shown = S.view.reduce((n, t) => n + 1 + t.replies.length, 0);
+    $('#findCount').textContent =
+      `${shown.toLocaleString()} ${shown === 1 ? 'comment' : 'comments'}`;
+    $('#findCount').classList.remove('none');
+  }
+
+  const extra = [];
+  if (f.author) extra.push(`by ${f.author}`);
+  if (f.from || f.to) extra.push(`${f.from} → ${f.to}`);
+  if (hasText && total) extra.push(
+    `in ${S.view.length.toLocaleString()} ${S.view.length === 1 ? 'thread' : 'threads'}`);
+  $('#findExtra').textContent = extra.join(' · ');
+  bar.classList.remove('hidden');
+}
+
+$('#findNext').addEventListener('click', () => gotoMatch(S.matchIdx + 1));
+$('#findPrev').addEventListener('click', () => gotoMatch(S.matchIdx - 1));
+
+/* ── rendering ─────────────────────────────────────────── */
+function renderReset() {
+  $('#list').innerHTML = ''; S.rendered = 0;
+  $('#listEnd').classList.add('hidden');
+  renderMore();
+}
+function renderMore() {
+  if (S.rendered >= S.view.length) {
+    const e = $('#listEnd');
+    e.classList.remove('hidden');
+    e.textContent = S.view.length ? `End of ${S.view.length.toLocaleString()} threads`
+                                  : 'No comments match this filter.';
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  const stop = Math.min(S.rendered + S.chunk, S.view.length);
+  for (let i = S.rendered; i < stop; i++) frag.appendChild(renderThread(S.view[i]));
+  $('#list').appendChild(frag);
+  S.rendered = stop;
+}
+new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) renderMore(); },
+  { rootMargin: '900px' }).observe($('#sentinel'));
+
+function setCollapsed(rw, on) {
+  rw.classList.toggle('collapsed', on);
+  const rail = rw.querySelector('.rail');
+  const n = +rw.dataset.replyCount || 0;
+  if (rail) rail.dataset.tip = on
+    ? `Show ${n} ${n === 1 ? 'reply' : 'replies'}`
+    : 'Hide replies';
+  const label = rw.querySelector('.rep-collapsed');
+  if (label) label.textContent = `${n} ${n === 1 ? 'reply' : 'replies'} hidden — click to show`;
+}
+
+function renderThread(t, forcePrint) {
+  const el = document.createElement('div');
+  el.className = 'thread';
+  el.appendChild(renderComment(t.comment, false));
+  const reps = t.replies;
+  if (!reps.length) return el;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'rep-wrap';
+  wrap.dataset.replyCount = reps.length;
+
+  const rail = document.createElement('button');
+  rail.className = 'rail';
+  rail.setAttribute('aria-label', 'Collapse replies');
+  rail.dataset.tip = 'Hide replies';
+  wrap.appendChild(rail);
+
+  const box = document.createElement('div');
+  box.className = 'rep-box';
+
+  const CAP = 10;
+  const trim = !forcePrint && !S.activeFilter && reps.length > CAP;
+  (trim ? reps.slice(0, CAP) : reps).forEach((r) => box.appendChild(renderComment(r, true)));
+
+  if (trim) {
+    const n = reps.length - CAP;
+    const btn = document.createElement('button');
+    btn.className = 'rep-toggle';
+    btn.textContent = `Show ${n} more ${n === 1 ? 'reply' : 'replies'}`;
+    btn.addEventListener('click', () => {
+      reps.slice(CAP).forEach((r) => box.appendChild(renderComment(r, true)));
+      btn.remove();
+    }, { once: true });
+    box.appendChild(btn);
+  }
+  wrap.appendChild(box);
+
+  const label = document.createElement('button');
+  label.className = 'rep-collapsed';
+  label.textContent = `${reps.length} ${reps.length === 1 ? 'reply' : 'replies'} hidden — click to show`;
+  wrap.appendChild(label);
+
+  const toggle = () => setCollapsed(wrap, !wrap.classList.contains('collapsed'));
+  rail.addEventListener('click', toggle);
+  label.addEventListener('click', toggle);
+
+  el.appendChild(wrap);
+  return el;
+}
+
+function renderComment(c, isReply) {
+  const el = document.createElement('div');
+  el.className = 'cm' + (isReply ? ' reply' : '');
+  el.dataset.cid = c.id;
+  const isOP = c.channelId && S.payload && c.channelId === S.payload.channelId;
+
+  const av = document.createElement(c.channelId ? 'a' : 'div');
+  av.className = 'av' + (c.channelId ? ' av-link' : '');
+  av.style.background = avatarColor(c.channelId || c.author || c.id);
+  av.textContent = initial(c.author);
+  if (c.channelId) {
+    av.href = 'https://www.youtube.com/channel/' + c.channelId;
+    av.target = '_blank'; av.rel = 'noopener';
+    av.dataset.tip = `${c.author}\nOpen this channel on YouTube`;
+  } else {
+    av.dataset.tip = c.author;
+  }
+  el.appendChild(av);
+
+  const body = document.createElement('div');
+  body.className = 'cm-body';
+  const head = document.createElement('div');
+  head.className = 'cm-head';
+
+  const authorHit = S.authorMatcher && S.authorMatcher.test(c.author || '');
+  const name = document.createElement('span');
+  name.className = 'cm-author' + (authorHit ? ' au-hit' : '');
+  name.textContent = c.author || '(unknown)';
+  if (c.author) {
+    // Fills the author box only — filtering still waits for Search or Enter,
+    // matching what the Creator button does.
+    name.dataset.tip = `Put ${c.author} in the author search`;
+    name.addEventListener('click', () => setAuthorField(c.author));
+  } else {
+    name.style.cursor = 'default';
+  }
+  head.appendChild(name);
+
+  if (isOP) {
+    const tag = document.createElement('span');
+    tag.className = 'cm-op'; tag.textContent = 'Creator';
+    head.appendChild(tag);
+  }
+
+  const edited = c.updatedAt && c.updatedAt !== c.publishedAt;
+  const age = document.createElement('a');
+  age.className = 'cm-age';
+  age.textContent = relAge(c.publishedAt) + (edited ? ' (edited)' : '');
+  age.href = `https://www.youtube.com/watch?v=${S.payload.videoId}&lc=${c.id}`;
+  age.target = '_blank'; age.rel = 'noopener';
+  age.dataset.tip = fmtUTC(c.publishedAt) + (edited ? `\nEdited ${fmtUTC(c.updatedAt)}` : '') +
+    '\nClick to open this comment on YouTube';
+  head.appendChild(age);
+  body.appendChild(head);
+
+  const text = document.createElement('div');
+  text.className = 'cm-text';
+  buildText(text, c.text || '');
+  body.appendChild(text);
+
+  if (c.likeCount > 0) {
+    const foot = document.createElement('div');
+    foot.className = 'cm-foot';
+    const l = document.createElement('span');
+    l.className = 'cm-likes';
+    l.innerHTML = THUMB + `<span>${c.likeCount.toLocaleString()}</span>`;
+    l.dataset.tip = `${c.likeCount.toLocaleString()} likes\n` +
+      'Dislikes are not exposed by the API.';
+    foot.appendChild(l);
+    body.appendChild(foot);
+  }
+  el.appendChild(body);
+  return el;
+}
+
+/* Links and highlights never nest: URL spans win any overlap.
+   computeSpans is the single source of truth so the rendered <mark>s and the
+   navigable match index can never disagree about how many hits there are. */
+const URL_RE = /(https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+)/gi;
+
+function computeSpans(raw) {
+  const spans = [];
+  URL_RE.lastIndex = 0;
+  let m;
+  while ((m = URL_RE.exec(raw)) !== null) spans.push({ s: m.index, e: m.index + m[0].length, kind: 'url' });
+  if (S.matcher) {
+    S.matcher.lastIndex = 0;
+    let k, guard = 0;
+    while ((k = S.matcher.exec(raw)) !== null && guard++ < 5000) {
+      if (!k[0].length) { S.matcher.lastIndex++; continue; }
+      const s = k.index, e = s + k[0].length;
+      if (!spans.some((sp) => sp.kind === 'url' && s < sp.e && e > sp.s)) spans.push({ s, e, kind: 'hit' });
+    }
+  }
+  spans.sort((a, b) => a.s - b.s || a.e - b.e);
+  // Drop anything swallowed by an earlier span so counts match what renders.
+  const out = [];
+  let end = 0;
+  for (const sp of spans) {
+    if (sp.s < end) continue;
+    out.push(sp);
+    end = sp.e;
+  }
+  return out;
+}
+
+function countHits(raw) {
+  if (!S.matcher) return 0;
+  let n = 0;
+  for (const sp of computeSpans(raw)) if (sp.kind === 'hit') n++;
+  return n;
+}
+
+function buildText(container, raw) {
+  const spans = computeSpans(raw);
+  let pos = 0;
+  for (const sp of spans) {
+    if (sp.s > pos) container.appendChild(document.createTextNode(raw.slice(pos, sp.s)));
+    const piece = raw.slice(sp.s, sp.e);
+    if (sp.kind === 'url') {
+      const a = document.createElement('a');
+      a.href = /^https?:/i.test(piece) ? piece : 'https://' + piece;
+      a.textContent = piece; a.target = '_blank'; a.rel = 'noopener nofollow';
+      a.title = a.href;
+      container.appendChild(a);
+    } else {
+      const mk = document.createElement('mark');
+      mk.textContent = piece;
+      container.appendChild(mk);
+    }
+    pos = sp.e;
+  }
+  if (pos < raw.length) container.appendChild(document.createTextNode(raw.slice(pos)));
+}
+
+const THUMB = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" ' +
+  'd="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 ' +
+  '7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>';
+
+/* ── avatars & formatting ──────────────────────────────── */
+function hash(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function avatarColor(seed) {
+  const h = hash(seed);
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  return `hsl(${h % 360} ${42 + (h >> 9) % 26}% ${dark ? 42 : 46}%)`;
+}
+function initial(name) {
+  const s = (name || '').replace(/^@/, '').trim();
+  return s ? Array.from(s)[0].toUpperCase() : '?';
+}
+function fmtUTC(i) {
+  if (!i) return '';
+  const d = new Date(i);
+  if (isNaN(d)) return i;
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ` +
+         `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())} UTC`;
+}
+function relAge(i) {
+  const d = new Date(i);
+  if (isNaN(d)) return '';
+  let s = Math.max(0, (Date.now() - d.getTime()) / 1000);
+  for (const [sec, name] of [[31536000, 'year'], [2592000, 'month'], [604800, 'week'],
+                             [86400, 'day'], [3600, 'hour'], [60, 'minute']]) {
+    if (s >= sec) { const n = Math.floor(s / sec); return `${n} ${name}${n > 1 ? 's' : ''} ago`; }
+  }
+  return 'just now';
+}
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
+  (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/* ── history ───────────────────────────────────────────── */
+const PANEL_PATH = '<path fill-rule="evenodd" fill="currentColor" d="M3.75 2A1.75 1.75 0 002 3.75v16.5c0 .966.784 1.75 1.75 1.75h16.5A1.75 1.75 0 0022 20.25V3.75A1.75 1.75 0 0020.25 2H3.75zM3.5 3.75a.25.25 0 01.25-.25H15v17H3.75a.25.25 0 01-.25-.25V3.75zm13 16.75v-17h3.75a.25.25 0 01.25.25v16.5a.25.25 0 01-.25.25H16.5z"/>';
+const SIDE_ICON = {
+  // sidebar open: chevron points right, pushing the panel away
+  collapse: '<path fill-rule="evenodd" fill="currentColor" d="M7.22 14.47L9.69 12 7.22 9.53a.75.75 0 111.06-1.06l3 3a.75.75 0 010 1.06l-3 3a.75.75 0 01-1.06-1.06z"/>' + PANEL_PATH,
+  // sidebar closed: chevron points left, pulling it back out
+  expand: '<path fill-rule="evenodd" fill="currentColor" d="M11.28 9.53L8.81 12l2.47 2.47a.75.75 0 11-1.06 1.06l-3-3a.75.75 0 010-1.06l3-3a.75.75 0 111.06 1.06z"/>' + PANEL_PATH,
+};
+function paintSideIcon() {
+  const closed = $('#sidebar').classList.contains('collapsed');
+  $('#sideIcon').innerHTML = closed ? SIDE_ICON.expand : SIDE_ICON.collapse;
+  $('#sideBtn').dataset.tip = closed ? 'Show history' : 'Hide history';
+}
+$('#sideBtn').addEventListener('click', () => {
+  const sb = $('#sidebar');
+  sb.classList.toggle('collapsed');
+  LS.set('sidebarOpen', !sb.classList.contains('collapsed'));
+  paintSideIcon();
+});
+$('#histSearch').addEventListener('input', paintHistory);
+
+function paintHistory() {
+  const q = $('#histSearch').value.trim().toLowerCase();
+  const list = S.history.filter((h) => !q || (h.title || '').toLowerCase().includes(q));
+  const box = $('#histList');
+  box.innerHTML = '';
+  if (!list.length) {
+    box.innerHTML = `<div class="side-empty">${S.history.length ? 'No titles match.'
+      : 'Fetched videos will be listed here.'}</div>`;
+    return;
+  }
+  const cachedIds = DB.ids;
+  for (const h of list) {
+    const cached = cachedIds.has(h.videoId);
+    const el = document.createElement('div');
+    el.className = 'hist' + (S.payload && S.payload.videoId === h.videoId ? ' active' : '');
+    el.innerHTML = `${h.thumbnail ? `<img src="${esc(h.thumbnail)}" alt="">` : '<img alt="">'}
+      <div class="hist-info">
+        <div class="hist-title">${esc(h.title || h.videoId)}</div>
+        <div class="hist-sub">${(h.count || 0).toLocaleString()} comments${
+          cached ? '' : ' · not cached'}</div>
+        <div class="hist-sub">Fetched on ${h.fetchedAt ? h.fetchedAt.slice(0, 10) : '—'}</div>
+      </div>`;
+    el.addEventListener('click', () => openHistory(h));
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showCtx(e.clientX, e.clientY, [
+        { label: 'Fetch again', fn: () => {
+            setUrl('https://www.youtube.com/watch?v=' + h.videoId);
+            startFetch();
+          } },
+        { label: 'Copy video URL', fn: () => copy('https://www.youtube.com/watch?v=' + h.videoId) },
+        { label: 'Delete', danger: true, fn: () => confirmBox('Delete this entry?',
+            `“${h.title}” and its cached comments will be removed.`, async () => {
+              await DB.del(h.videoId);
+              S.history = S.history.filter((x) => x.videoId !== h.videoId);
+              LS.set('history', S.history);
+              paintHistory(); paintStorage();
+            }) },
+      ]);
+    });
+    box.appendChild(el);
+  }
+}
+
+async function openHistory(h) {
+  const d = await DB.get(h.videoId);
+  if (!d) {
+    confirmBox('Re-fetch this video?',
+      'Its cached copy was evicted to make room. Loading it again re-downloads the comments.',
+      () => { setUrl('https://www.youtube.com/watch?v=' + h.videoId); startFetch(); },
+      { label: 'Re-fetch', danger: false });
+    return;
+  }
+  loadPayload(unpack(d));
+  paintHistory();
+  status('Loaded from cache');
+}
+
+$('#wipeHist').addEventListener('click', () => confirmBox('Wipe the entire history?',
+  'Every entry and every cached copy of its comments will be deleted. This cannot be undone.',
+  async () => {
+    await DB.clear();
+    S.history = []; LS.set('history', []);
+    paintHistory(); paintStorage(); toast('History wiped.');
+  }));
+
+async function copy(t, msg) {
+  try { await navigator.clipboard.writeText(t); toast(msg || 'URL copied.'); }
+  catch { toast('Clipboard blocked by the browser.', 'err'); }
+}
+
+/* ── confirm & context menu ────────────────────────────── */
+let cfAction = null;
+function confirmBox(title, body, fn, opts) {
+  opts = opts || {};
+  $('#cfTitle').textContent = title;
+  $('#cfBody').textContent = body;
+  hideTip();
+  const yes = $('#cfYes');
+  yes.textContent = opts.label || 'Delete';
+  yes.className = 'btn ' + (opts.danger === false ? 'primary' : 'danger');
+  cfAction = fn;
+  $('#confirm').classList.remove('hidden');
+}
+$('#cfNo').addEventListener('click', () => { cfAction = null; $('#confirm').classList.add('hidden'); });
+$('#cfYes').addEventListener('click', () => {
+  const fn = cfAction; cfAction = null;
+  $('#confirm').classList.add('hidden');
+  if (fn) fn();
+});
+function showCtx(x, y, items) {
+  const m = $('#ctxMenu');
+  m.innerHTML = '';
+  for (const it of items) {
+    const b = document.createElement('button');
+    b.textContent = it.label;
+    if (it.danger) b.className = 'danger-text';
+    b.addEventListener('click', () => { m.classList.add('hidden'); it.fn(); });
+    m.appendChild(b);
+  }
+  m.classList.remove('hidden');
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
+  m.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
+}
+document.addEventListener('mousedown', (e) => {
+  if (!e.target.closest('#ctxMenu')) $('#ctxMenu').classList.add('hidden');
+  if (!e.target.closest('#calPop') && !e.target.closest('.cal-btn')) $('#calPop').classList.add('hidden');
+  if (!e.target.closest('.menu-wrap')) $('#exportMenu').classList.add('hidden');
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  ['#ctxMenu', '#calPop', '#exportMenu'].forEach((s) => $(s).classList.add('hidden'));
+  if (!$('#confirm').classList.contains('hidden')) { cfAction = null; $('#confirm').classList.add('hidden'); }
+  else if (!$('#settings').classList.contains('hidden')) $('#settings').classList.add('hidden');
+});
+
+/* ── calendar ──────────────────────────────────────────── */
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+                'August', 'September', 'October', 'November', 'December'];
+const DOW = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+let cal = { target: null, y: 0, m: 0, mode: 'days' };
+
+$$('.cal-btn').forEach((b) => b.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const input = $('#' + b.dataset.cal), pop = $('#calPop');
+  if (!pop.classList.contains('hidden') && cal.target === input) { pop.classList.add('hidden'); return; }
+  const cur = validDate(input.value.trim()) ? input.value.trim() : todayISO();
+  const [y, m] = cur.split('-').map(Number);
+  cal = { target: input, y, m: m - 1, mode: 'days' };
+  drawCal();
+  pop.classList.remove('hidden');
+  const r = b.getBoundingClientRect(), pr = pop.getBoundingClientRect();
+  pop.style.left = Math.max(8, Math.min(r.left - 100, innerWidth - pr.width - 8)) + 'px';
+  pop.style.top = (r.bottom + pr.height > innerHeight - 8 ? r.top - pr.height - 6 : r.bottom + 6) + 'px';
+}));
+
+function drawCal() {
+  const pop = $('#calPop');
+  const sel = cal.target && validDate(cal.target.value.trim()) ? cal.target.value.trim() : null;
+  const today = todayISO();
+  if (cal.mode === 'months') {
+    pop.innerHTML = `<div class="cal-head"><button data-nav="-y">‹</button>
+      <span class="cal-title" data-mode="years">${cal.y}</span>
+      <button data-nav="+y">›</button></div>
+      <div class="cal-months">${MONTHS.map((n, i) =>
+        `<button data-month="${i}">${n.slice(0, 3)}</button>`).join('')}</div>`;
+  } else if (cal.mode === 'years') {
+    const base = cal.y - 8;
+    pop.innerHTML = `<div class="cal-head"><button data-nav="-16y">‹</button>
+      <span class="cal-title">${base}–${base + 19}</span>
+      <button data-nav="+16y">›</button></div>
+      <div class="cal-years">${Array.from({ length: 20 }, (_, i) =>
+        `<button data-year="${base + i}">${base + i}</button>`).join('')}</div>`;
+  } else {
+    const lead = (new Date(Date.UTC(cal.y, cal.m, 1)).getUTCDay() + 6) % 7;
+    const days = new Date(Date.UTC(cal.y, cal.m + 1, 0)).getUTCDate();
+    const prev = new Date(Date.UTC(cal.y, cal.m, 0)).getUTCDate();
+    const cells = [];
+    for (let i = lead - 1; i >= 0; i--) cells.push({ d: prev - i, dim: true, off: -1 });
+    for (let d = 1; d <= days; d++) cells.push({ d, dim: false, off: 0 });
+    while (cells.length % 7) cells.push({ d: cells.length - lead - days + 1, dim: true, off: 1 });
+    pop.innerHTML = `<div class="cal-head"><button data-nav="-m">‹</button>
+      <span class="cal-title" data-mode="months">${MONTHS[cal.m]} ${cal.y}</span>
+      <button data-nav="+m">›</button></div>
+      <div class="cal-grid">${DOW.map((d) => `<div class="cal-dow">${d}</div>`).join('')}
+      ${cells.map((c) => {
+        const i = new Date(Date.UTC(cal.y, cal.m + c.off, c.d)).toISOString().slice(0, 10);
+        const cls = ['cal-day', c.dim ? 'dim' : '', i === today ? 'today' : '',
+                     i === sel ? 'sel' : ''].filter(Boolean).join(' ');
+        return `<button class="${cls}" data-date="${i}">${c.d}</button>`;
+      }).join('')}</div>
+      <div class="cal-foot"><button data-date="${today}">Today</button>
+      <button data-clear="1">Clear</button></div>`;
+  }
+}
+
+$('#calPop').addEventListener('click', (e) => {
+  const t = e.target.closest('button, .cal-title');
+  if (!t) return;
+  if (t.dataset.date) { cal.target.value = t.dataset.date; cal.target.classList.remove('bad');
+    $('#calPop').classList.add('hidden'); return; }
+  if (t.dataset.clear) { cal.target.value = ''; $('#calPop').classList.add('hidden'); return; }
+  if (t.dataset.mode) { cal.mode = t.dataset.mode; drawCal(); return; }
+  if (t.dataset.month !== undefined) { cal.m = +t.dataset.month; cal.mode = 'days'; drawCal(); return; }
+  if (t.dataset.year !== undefined) { cal.y = +t.dataset.year; cal.mode = 'months'; drawCal(); return; }
+  const n = t.dataset.nav;
+  if (n === '-m') { if (--cal.m < 0) { cal.m = 11; cal.y--; } }
+  else if (n === '+m') { if (++cal.m > 11) { cal.m = 0; cal.y++; } }
+  else if (n === '-y') cal.y--;
+  else if (n === '+y') cal.y++;
+  else if (n === '-16y') cal.y -= 20;
+  else if (n === '+16y') cal.y += 20;
+  drawCal();
+});
+
+['fromInput', 'toInput'].forEach((id) => {
+  const el = $('#' + id);
+  el.addEventListener('input', () => {
+    let v = el.value.replace(/[^\d-]/g, '');
+    const d = v.replace(/-/g, '');
+    if (!v.includes('-') && d.length > 4)
+      v = d.slice(0, 4) + '-' + d.slice(4, 6) + (d.length > 6 ? '-' + d.slice(6, 8) : '');
+    el.value = v.slice(0, 10);
+    el.classList.remove('bad');
+  });
+});
+
+/* ══ export ════════════════════════════════════════════════ */
+$('#exportBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  $('#exportMenu').classList.toggle('hidden');
+});
+$('#exportMenu').addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-fmt]');
+  if (!b) return;
+  $('#exportMenu').classList.add('hidden');
+  if (!S.payload) return;
+  if (!S.view.length) { toast('Nothing to export — the current view is empty.', 'err'); return; }
+  const fmt = b.dataset.fmt;
+  if (fmt === 'pdf') return exportPdf();
+  const base = safeName(S.payload.title || S.payload.videoId);
+  if (fmt === 'json') await save(base + '.json', buildJSON(), 'application/json');
+  else await save(base + '.html', buildHTML(), 'text/html');
+});
+
+const safeName = (s) => (s || 'comments').replace(/[^\w\s.-]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80);
+
+function viewMeta() {
+  const f = S.activeFilter;
+  return { sort: S.sort, query: f ? f.query : '', author: f ? f.author : '',
+           regex: f ? f.regex : false, caseSensitive: f ? f.caseSensitive : false,
+           from: f ? f.from : '', to: f ? f.to : '' };
+}
+
+function buildJSON() {
+  const flat = [];
+  for (const t of S.view) { flat.push(t.comment); flat.push(...t.replies); }
+  const m = { ...S.payload };
+  delete m.comments;
+  return JSON.stringify({
+    exportedAt: new Date().toISOString(),
+    video: m, view: viewMeta(),
+    counts: { threads: S.view.length, topLevel: S.view.length,
+              replies: S.view.reduce((n, t) => n + t.replies.length, 0), total: flat.length },
+    comments: flat,
+  }, null, 2);
+}
+
+function richHTML(text) {
+  let out = '', pos = 0, m;
+  const e = esc(text || '');
+  URL_RE.lastIndex = 0;
+  while ((m = URL_RE.exec(e)) !== null) {
+    out += e.slice(pos, m.index);
+    const raw = m[0];
+    const href = /^https?:/i.test(raw) ? raw : 'https://' + raw;
+    out += `<a href="${href}" rel="noopener">${raw}</a>`;
+    pos = m.index + raw.length;
+  }
+  return (out + e.slice(pos)).replace(/\n/g, '<br>');
+}
+
+function buildHTML() {
+  const p = S.payload, v = viewMeta();
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const [bg, fg, mu, ln, ac] = dark
+    ? ['#15181b', '#e6e9ec', '#8d97a1', '#2c333a', '#4ec9c9']
+    : ['#ffffff', '#14181c', '#5d666f', '#e2e6e9', '#0d7a7a'];
+  const total = S.view.reduce((n, t) => n + 1 + t.replies.length, 0);
+  const filt = [];
+  if (v.query) filt.push(`text “${esc(v.query)}” (${v.regex ? 'regex, ' : ''}` +
+    `${v.caseSensitive ? 'case-sensitive' : 'case-insensitive'})`);
+  if (v.author) filt.push(`author “${esc(v.author)}”`);
+  if (v.from || v.to) filt.push(`dates ${v.from || '…'} → ${v.to || '…'}`);
+
+  const block = (c, isRep) => {
+    const perma = `https://www.youtube.com/watch?v=${p.videoId}&lc=${c.id}`;
+    const name = c.channelId
+      ? `<a class="au" href="https://www.youtube.com/channel/${c.channelId}">${esc(c.author)}</a>`
+      : `<span class="au">${esc(c.author)}</span>`;
+    const av = `<div class="av" style="background:${avatarColor(c.channelId || c.author || c.id)}"` +
+      `>${esc(initial(c.author))}</div>`;
+    return `<div class="c${isRep ? ' r' : ''}">${av}<div class="cb"><div class="h">${name} ` +
+      `<a class="ts" href="${perma}">${fmtUTC(c.publishedAt)}</a>` +
+      `${c.likeCount ? ` <span class="lk">${THUMB} ${c.likeCount.toLocaleString()}</span>` : ''}</div>` +
+      `<div class="t">${richHTML(c.text)}</div></div></div>`;
+  };
+  const body = S.view.map((t) => {
+    if (!t.replies.length) return `<div class="th">${block(t.comment, false)}</div>`;
+    const n = t.replies.length;
+    return `<div class="th">${block(t.comment, false)}` +
+      `<div class="rw" data-n="${n}">` +
+      `<button class="rail" aria-label="Collapse replies"></button>` +
+      `<div class="rb">${t.replies.map((r) => block(r, true)).join('')}</div>` +
+      `<button class="rc">${n} ${n === 1 ? 'reply' : 'replies'} hidden — click to show</button>` +
+      `</div></div>`;
+  }).join('');
+
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>${esc(p.title)} — comments</title><style>
+@page{margin:14mm}html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{background:${bg};color:${fg};margin:0;padding:28px 30px 60px;
+ font:14px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.doc{max-width:820px;margin:0 auto}
+h1{font-size:20px;line-height:1.3;margin:0 0 4px;font-weight:650}
+.meta{color:${mu};font-size:12.5px;margin-bottom:22px}
+.th{border-top:1px solid ${ln};padding:14px 0 4px;break-inside:avoid}
+.c{margin-bottom:11px;display:flex;gap:10px}
+.c.r{margin-left:0}
+.rw{display:flex;gap:0;margin-left:16px}
+.rail{flex:0 0 auto;width:15px;border:0;background:none;cursor:pointer;padding:0;
+ display:flex;justify-content:center}
+.rail::before{content:'';width:2px;height:100%;background:${ln};border-radius:1px}
+.rail:hover::before{background:${ac}}
+.rb{flex:1;min-width:0;padding-left:11px}
+.rc{display:none;border:0;background:none;color:${ac};cursor:pointer;font:inherit;
+ font-size:12.5px;padding:2px 8px}
+.rw.collapsed .rb{display:none}
+.rw.collapsed .rc{display:block}
+@media print{.rail{display:none}.rb{padding-left:12px;border-left:2px solid ${ln}}.rc{display:none!important}}
+.cb{min-width:0;flex:1}
+.av{flex:0 0 auto;width:32px;height:32px;border-radius:50%;display:flex;
+ align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#fff;
+ -webkit-print-color-adjust:exact;print-color-adjust:exact}
+.c.r .av{width:25px;height:25px;font-size:11px}
+.lk svg{width:12px;height:12px;vertical-align:-2px}
+.h{font-size:12.5px;color:${mu};margin-bottom:3px}
+.au{font-weight:600;color:${fg};text-decoration:none}
+.ts,.lk{color:${mu};text-decoration:none}
+.t{white-space:pre-wrap;overflow-wrap:anywhere}
+a{color:${ac}}</style></head><body><div class="doc">
+<h1>${esc(p.title)}</h1><div class="meta">${esc(p.channelTitle)} ·
+<a href="https://www.youtube.com/watch?v=${p.videoId}">youtube.com/watch?v=${p.videoId}</a><br>
+${total.toLocaleString()} comments shown · sorted by ${v.sort}<br>Filter: ${filt.length ? filt.join('; ') : 'no filter — all comments'}<br>
+Fetched ${fmtUTC(p.fetchedAt)} · exported ${fmtUTC(new Date().toISOString())}</div>
+${body}</div>
+<script>
+document.addEventListener('click', function (e) {
+  var hit = e.target.closest('.rail, .rc');
+  if (!hit) return;
+  hit.closest('.rw').classList.toggle('collapsed');
+});
+<\/script></body></html>`;
+}
+
+async function save(name, text, mime) {
+  // Chrome and Edge can offer a real "where do you want this?" dialog.
+  if (window.showSaveFilePicker) {
+    try {
+      const ext = name.split('.').pop();
+      const handle = await window.showSaveFilePicker({
+        suggestedName: name,
+        types: [{ description: ext.toUpperCase(), accept: { [mime]: ['.' + ext] } }],
+      });
+      const w = await handle.createWritable();
+      await w.write(new Blob([text], { type: mime }));
+      await w.close();
+      toast('Saved.', 'ok');
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;             // user cancelled
+      /* fall through to the download path */
+    }
+  }
+  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast('Saved to your downloads folder.', 'ok');
+}
+
+function exportPdf() {
+  const n = S.view.reduce((x, t) => x + 1 + t.replies.length, 0);
+  const go = () => {
+    status('Laying out every comment for printing…');
+    // The print sheet must contain the whole view, not just the rendered chunk.
+    setTimeout(() => {
+      const list = $('#list');
+      list.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      S.view.forEach((t) => frag.appendChild(renderThread(t, true)));
+      list.appendChild(frag);
+      S.rendered = S.view.length;
+
+      const v = viewMeta(), p = S.payload;
+      const filt = [];
+      if (v.query) filt.push(`text “${esc(v.query)}”`);
+      if (v.from || v.to) filt.push(`${v.from} → ${v.to}`);
+      $('#printHead').innerHTML = `<h1>${esc(p.title)}</h1><div class="ph-meta">
+        ${esc(p.channelTitle)} · youtube.com/watch?v=${esc(p.videoId)}<br>
+        ${S.view.length.toLocaleString()} threads · ${n.toLocaleString()} comments ·
+        sorted by ${v.sort}<br>
+        ${filt.length ? 'Filter: ' + filt.join('; ') : 'No filter — all comments'}</div>`;
+
+      setTimeout(() => {
+        status('');
+        window.print();
+        // Restore the chunked view afterwards so scrolling stays fast.
+        setTimeout(() => { $('#printHead').innerHTML = ''; renderReset(); }, 400);
+      }, 350);
+    }, 40);
+  };
+  if (n > 1500) {
+    confirmBox('Export ' + n.toLocaleString() + ' comments to PDF?',
+      'Everything in the current view has to be laid out at once, which may take a while and ' +
+      'produce a very long document. Narrowing the filter first usually gives a better result.',
+      go, { label: 'Export anyway', danger: false });
+  } else go();
+}
+
+/* ── tooltip ───────────────────────────────────────────────
+   Replaces the native title attribute, whose ~500 ms delay the
+   browser owns and no API can shorten. */
+const TIP_DELAY = 250;
+let tipTimer = null, tipEl = null;
+
+function positionTip(x, y) {
+  const t = $('#tip');
+  const r = t.getBoundingClientRect();
+  let left = x + 14, top = y + 18;
+  if (left + r.width > innerWidth - 8) left = x - r.width - 12;
+  if (top + r.height > innerHeight - 8) top = y - r.height - 10;
+  t.style.left = Math.max(8, left) + 'px';
+  t.style.top = Math.max(8, top) + 'px';
+}
+function hideTip() {
+  clearTimeout(tipTimer);
+  tipEl = null;
+  const t = $('#tip');
+  t.classList.remove('on');
+  t.classList.add('hidden');
+}
+document.addEventListener('mouseover', (e) => {
+  const el = e.target.closest('[data-tip]');
+  if (!el || el === tipEl) return;
+  clearTimeout(tipTimer);
+  tipEl = el;
+  const x = e.clientX, y = e.clientY;
+  tipTimer = setTimeout(() => {
+    if (tipEl !== el || !el.isConnected) return;
+    const t = $('#tip');
+    t.textContent = el.dataset.tip;
+    t.classList.remove('hidden');
+    positionTip(x, y);
+    requestAnimationFrame(() => t.classList.add('on'));
+  }, TIP_DELAY);
+});
+document.addEventListener('mouseout', (e) => {
+  const el = e.target.closest('[data-tip]');
+  if (el && el === tipEl) hideTip();
+});
+document.addEventListener('mousemove', (e) => {
+  if (tipEl && !$('#tip').classList.contains('hidden')) positionTip(e.clientX, e.clientY);
+});
+['mousedown', 'wheel', 'scroll'].forEach((ev) =>
+  document.addEventListener(ev, hideTip, { passive: true, capture: true }));
+
+/* ── toast & status ────────────────────────────────────── */
+let toastTimer, statusTimer;
+function toast(msg, kind = '') {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast ' + kind;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.add('hidden'), kind === 'err' ? 7000 : 3800);
+}
+function status(msg) {
+  $('#statusText').innerHTML = msg ? `<span class="spinner"></span>${esc(msg)}` : '';
+  clearTimeout(statusTimer);
+  if (msg) statusTimer = setTimeout(() => { $('#statusText').innerHTML = ''; }, 8000);
+}
+
+boot();
+
+</script>
+</body>
+</html>
