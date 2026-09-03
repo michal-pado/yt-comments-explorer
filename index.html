@@ -1171,7 +1171,8 @@ async function boot() {
   S.history = LS.get('history', []);
   paintHistory();
   paintStorage();
-  $('#sidebar').classList.toggle('collapsed', !LS.get('sidebarOpen', true));
+  // Collapsed on first run; the toggle is remembered from then on.
+  $('#sidebar').classList.toggle('collapsed', !LS.get('sidebarOpen', false));
   paintSideIcon();
   const hasKey = !!LS.get('apiKey', '');
   paintKeyState(hasKey);
