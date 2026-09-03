@@ -1027,14 +1027,42 @@ async function apiGet(endpoint, params, signal) {
       message = (j.error && j.error.message) || message;
     } catch {}
 
-    if ([500, 502, 503, 504].includes(r.status) || reason === 'backendError') {
+    // Concurrent requests make 429s likely; back off and retry rather than
+    // failing the whole fetch.
+    const retryable = [500, 502, 503, 504, 429].includes(r.status) ||
+      reason === 'backendError' || reason === 'rateLimitExceeded' ||
+      reason === 'userRateLimitExceeded';
+    if (retryable) {
       if (attempt === 4) throw new ApiError(message, reason);
-      await sleep(600 * 2 ** attempt, signal);
+      await sleep(600 * 2 ** attempt + Math.random() * 250, signal);
       continue;
     }
     throw new ApiError(REASONS[reason] || `${message} (${r.status}${reason ? ', ' + reason : ''})`, reason);
   }
   throw new ApiError('Request failed after several retries.');
+}
+
+/* How many reply requests are in flight at once. Higher finishes sooner but
+   raises the chance of 429s; those are retried with backoff, and a retry storm
+   is slower than a lower ceiling would have been. Six is a conservative pick. */
+let FANOUT_CONCURRENCY = 6;
+
+/* Runs `worker` over `items` with at most `limit` in flight. Rejects as soon as
+   any worker throws, so an abort or a fatal API error still stops everything. */
+async function runPool(items, limit, worker) {
+  let next = 0;
+  const width = Math.max(1, Math.min(limit, items.length));
+  const runners = [];
+  for (let k = 0; k < width; k++) {
+    runners.push((async () => {
+      for (;;) {
+        const i = next++;
+        if (i >= items.length) return;
+        await worker(items[i]);
+      }
+    })());
+  }
+  await Promise.all(runners);
 }
 
 const sleep = (ms, signal) => new Promise((res, rej) => {
@@ -1124,6 +1152,8 @@ async function fetchAll(vid, signal, onProgress) {
     (t.snippet.totalReplyCount || 0) > ((t.replies && t.replies.comments) || []).length);
   let done = 0;
 
+  // Threads whose inline preview already holds every reply need no request.
+  const pending = [];
   for (const t of threads) {
     const tid = t.snippet.topLevelComment.id;
     const total = t.snippet.totalReplyCount || 0;
@@ -1134,7 +1164,13 @@ async function fetchAll(vid, signal, onProgress) {
       repliesBy.set(tid, preview.map((c) => norm(c, tid)));
       continue;
     }
+    pending.push({ tid, preview });
+  }
 
+  /* Each parentId is independent, so these run concurrently. Phase 1 cannot
+     be parallelised — its pageToken chain is strictly sequential — which is
+     why this is the only place concurrency helps. */
+  await runPool(pending, FANOUT_CONCURRENCY, async ({ tid, preview }) => {
     const acc = [];
     let rtok;
     do {
@@ -1151,7 +1187,7 @@ async function fetchAll(vid, signal, onProgress) {
     inHand += Math.max(0, acc.length - preview.length);
     done++;
     onProgress({ phase: 'fetching', inHand, expected, stage: 'replies' });
-  }
+  });
 
   for (const arr of repliesBy.values()) {
     arr.sort((a, b) => (a.publishedAt < b.publishedAt ? -1 : 1));
