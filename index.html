@@ -192,9 +192,10 @@ a:hover { text-decoration: underline; }
 #videoHead .vh-thumb { width: 116px; aspect-ratio: 16/9; object-fit: cover;
   border-radius: var(--r); background: var(--panel); flex: 0 0 auto; }
 #videoHead h1 { margin: 0 0 4px; font-size: 17px; line-height: 1.35; font-weight: 620; }
+#videoHead .vh-warn { color: var(--warn); cursor: default;
+  border-bottom: 1px dotted var(--warn); }
 #videoHead .vh-meta { font-size: 12.5px; color: var(--muted); line-height: 1.7;
   font-variant-numeric: tabular-nums; }
-#videoHead .vh-warn { color: var(--warn); }
 
 /* ── empty state ──────────────────────────────────────── */
 #empty { flex: 1; display: grid; place-items: center; padding: 40px; }
@@ -1465,13 +1466,29 @@ function loadPayload(payload) {
   $('#main').scrollTop = 0;
 }
 
+/* A shortfall against YouTube's commentCount is only worth showing when it is
+   large. Small gaps are routine: the count drifts as comments are deleted, and
+   held or spam-flagged comments are counted but never returned. A gap that is
+   both 1% of the total AND at least 20 comments is a different animal — that
+   usually means pagination stopped early, and re-fetching can recover them.
+   The absolute floor matters because on a small video 1% can be one comment. */
+const GAP_NOTICE_THRESHOLD = 0.01;
+const GAP_NOTICE_FLOOR = 20;
+
 function paintVideoHead() {
-  const p = S.payload, rep = p.reportedCommentCount;
+  const p = S.payload;
+  const rep = p.reportedCommentCount;
   let note = '';
-  if (rep != null && rep !== p.fetchedCount) {
-    const d = rep - p.fetchedCount;
-    note = `<span class="vh-warn">YouTube reports ${rep.toLocaleString()} — ` +
-      `${Math.abs(d).toLocaleString()} ${d > 0 ? 'not returned by the API' : 'more than reported'}</span>`;
+  if (rep > 0 && p.fetchedCount < rep) {
+    const missing = rep - p.fetchedCount;
+    const share = missing / rep;
+    if (share >= GAP_NOTICE_THRESHOLD && missing >= GAP_NOTICE_FLOOR) {
+      const pct = share < 0.1 ? (share * 100).toFixed(1) : Math.round(share * 100);
+      note = `<span class="vh-warn" data-tip="A gap this large usually means the ` +
+        `listing stopped early rather than comments being deleted or held.` +
+        `\nFetching the video again may return more.">YouTube reports ` +
+        `${rep.toLocaleString()} — ${missing.toLocaleString()} not returned (${pct}%)</span>`;
+    }
   }
   $('#videoHead').innerHTML = `
     ${p.thumbnail ? `<img class="vh-thumb" src="${esc(p.thumbnail)}" alt="">` : ''}
