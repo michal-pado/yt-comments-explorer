@@ -123,7 +123,7 @@ a:hover { text-decoration: underline; }
 .tb-group.grow { flex: 1; min-width: 260px; }
 .tb-label { font-size: 12px; color: var(--muted); }
 #searchInput {
-  flex: 1; min-width: 140px; padding: 7px 11px; border-radius: var(--r);
+  width: 100%; min-width: 0; padding: 7px 68px 7px 11px; border-radius: var(--r);
   border: 1px solid var(--rule); background: var(--panel); color: var(--ink);
 }
 #searchInput:focus { border-color: var(--accent); outline: none; background: var(--bg); }
@@ -551,7 +551,12 @@ a:hover { text-decoration: underline; }
 .hist-sub + .hist-sub { margin-top: 1px; }
 
 /* ══ author search ══ */
-.tb-group.grow #searchInput { flex: 1.7 1 130px; }
+.search-field { flex: 1.7 1 130px; min-width: 150px; position: relative;
+  display: flex; align-items: center; }
+.search-tools { position: absolute; right: 6px; display: flex; align-items: center; gap: 4px; }
+.search-tools .check span { min-width: 26px; height: 24px; padding: 0 5px;
+  border-radius: 4px; font-size: 11px; }
+.search-tools .check input:not(:checked) + span { background: var(--bg); }
 .author-field { flex: 1 1 150px; min-width: 138px; position: relative;
   display: flex; align-items: center; }
 .author-field input {
@@ -712,15 +717,19 @@ a:hover { text-decoration: underline; }
           </div>
         </div>
         <div class="tb-group grow">
-          <input id="searchInput" type="text" spellcheck="false" autocomplete="off"
-                 placeholder="Search comments and replies">
+          <div class="search-field">
+            <input id="searchInput" type="text" spellcheck="false" autocomplete="off"
+                   placeholder="Search comments and replies">
+            <div class="search-tools">
+              <label class="check"><input type="checkbox" id="caseChk"><span>Aa</span><em>Case-sensitive</em></label>
+              <label class="check"><input type="checkbox" id="regexChk"><span>.*</span><em>Regex</em></label>
+            </div>
+          </div>
           <div class="author-field">
             <input id="authorInput" type="text" spellcheck="false" autocomplete="off"
                    placeholder="@author">
             <button class="op-btn" id="opBtn" data-tip="Fill in the video creator" aria-label="Search the video creator">Creator</button>
           </div>
-          <label class="check"><input type="checkbox" id="caseChk"><span>Aa</span><em>Case-sensitive</em></label>
-          <label class="check"><input type="checkbox" id="regexChk"><span>.*</span><em>Regex</em></label>
         </div>
         <div class="tb-group dates">
           <span class="tb-label" title="Dates use UTC">From (UTC)</span>
