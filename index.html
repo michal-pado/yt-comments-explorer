@@ -266,8 +266,9 @@ a:hover { text-decoration: underline; }
 .side-foot { padding: 9px; border-top: 1px solid var(--rule); }
 .side-foot .btn { width: 100%; }
 
-/* ── quota bar ────────────────────────────────────────── */
-#quotabar {
+/* ── status bar ───────────────────────────────────────── */
+#statusbar {
+  position: relative;
   flex: 0 0 auto; display: flex; align-items: center; gap: 9px;
   padding: 6px 14px; border-top: 1px solid var(--rule); background: var(--panel);
   font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
@@ -426,8 +427,8 @@ a:hover { text-decoration: underline; }
   @page { margin: 14mm; }
   html, body { height: auto !important; overflow: visible !important;
     background: #fff !important; color: #000 !important; }
-  #topbar, #toolbar, #sidebar, #quotabar, #progressWrap, #empty, #sentinel,
-  .overlay, .ctx, .cal, .toast, .rep-toggle, #filterNote { display: none !important; }
+  #topbar, #toolbar, #sidebar, #statusbar, #progressWrap, #empty, #sentinel,
+  .overlay, .ctx, .cal, .toast, .rep-toggle, #filterNote, #findBar { display: none !important; }
   #shell, #body, #main { display: block !important; height: auto !important;
     overflow: visible !important; }
   #main { padding: 0 !important; }
@@ -485,8 +486,19 @@ a:hover { text-decoration: underline; }
 .find-nav {
   width: 26px; height: 26px; flex: 0 0 auto; border: 1px solid var(--rule);
   background: var(--bg); color: var(--ink); border-radius: 5px; cursor: pointer;
-  font-size: 15px; line-height: 1; display: grid; place-items: center;
+  padding: 0; line-height: 1; display: grid; place-items: center;
 }
+.find-nav svg { display: block; width: 14px; height: 14px; }
+#toTop {
+  position: absolute; right: 14px; bottom: calc(100% + 10px); z-index: 30;
+  width: 28px; height: 28px; padding: 0;
+  display: grid; place-items: center; border: 1px solid var(--rule);
+  border-radius: 4px; background: var(--bg); color: var(--ink); cursor: pointer;
+}
+#toTop:hover { border-color: var(--accent); color: var(--accent); }
+#toTop svg { display: block; width: 16px; height: 16px; fill: currentColor; }
+.cm-author.au-active { background: var(--hit-active); color: var(--hit-active-ink);
+  border-radius: 3px; }
 .find-nav:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .find-nav:disabled { opacity: .35; cursor: not-allowed; }
 .find-count { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600;
@@ -559,6 +571,11 @@ a:hover { text-decoration: underline; }
   border-radius: 3px; padding: 0 3px; }
 .av-link { text-decoration: none; cursor: pointer; }
 .av-link:hover { box-shadow: 0 0 0 2px var(--accent); text-decoration: none; }
+
+/* a highlight inside a link must stay legible as both */
+.cm-text a mark { background: var(--hit); color: var(--hit-ink);
+  text-decoration: underline; }
+.cm-text a mark.active { background: var(--hit-active); color: var(--hit-active-ink); }
 
 </style>
 </head>
@@ -704,7 +721,7 @@ a:hover { text-decoration: underline; }
           <label class="check"><input type="checkbox" id="regexChk"><span>.*</span><em>Regex</em></label>
         </div>
         <div class="tb-group dates">
-          <span class="tb-label">From</span>
+          <span class="tb-label" title="Dates use UTC">From (UTC)</span>
           <div class="date-field">
             <input id="fromInput" type="text" placeholder="YYYY-MM-DD" maxlength="10"
                    spellcheck="false" autocomplete="off" inputmode="numeric">
@@ -736,8 +753,8 @@ a:hover { text-decoration: underline; }
       </div>
 
       <div id="findBar" class="hidden">
-        <button class="find-nav" id="findPrev" data-tip="Previous match (Shift+Enter)" aria-label="Previous match">‹</button>
-        <button class="find-nav" id="findNext" data-tip="Next match (Enter)" aria-label="Next match">›</button>
+        <button class="find-nav" id="findPrev" data-tip="Previous match (Shift+Enter)" aria-label="Previous match"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6 9 12 15 18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button class="find-nav" id="findNext" data-tip="Next match (Enter)" aria-label="Next match"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6 15 12 9 18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <span class="find-count" id="findCount"></span>
         <span class="find-extra" id="findExtra"></span>
       </div>
@@ -748,7 +765,7 @@ a:hover { text-decoration: underline; }
       <div id="empty">
         <div class="empty-inner">
           <h2>Nothing loaded yet</h2>
-          <p>Fetching comments hits the YouTube API once,<br>everything else happens offline</p>
+          <p>Download comments once,<br>everything after that happens offline</p>
         </div>
       </div>
 
@@ -769,11 +786,14 @@ a:hover { text-decoration: underline; }
     </aside>
   </div>
 
-  <footer id="quotabar">
+  <footer id="statusbar">
     <span class="q-status" id="statusText"></span>
     <span class="q-spacer"></span>
     <div class="s-meter" data-tip="Browser storage used by cached videos"><span class="s-fill" id="sFill"></span></div>
     <span id="sText"></span>
+    <button id="toTop" type="button" data-tip="Back to top" aria-label="Back to top">
+      <svg viewBox="0 0 330 330" aria-hidden="true"><path d="M325.606,229.393l-150.004-150C172.79,76.58,168.974,75,164.996,75c-3.979,0-7.794,1.581-10.607,4.394 l-149.996,150c-5.858,5.858-5.858,15.355,0,21.213c5.857,5.857,15.355,5.858,21.213,0l139.39-139.393l139.397,139.393 C307.322,253.536,311.161,255,315,255c3.839,0,7.678-1.464,10.607-4.394C331.464,244.748,331.464,235.251,325.606,229.393z"/></svg>
+    </button>
   </footer>
 </div>
 
@@ -798,8 +818,9 @@ const NS = 'ytce.';                        // localStorage prefix
 const S = {
   payload: null, threads: [], view: [], sort: 'top',
   rendered: 0, chunk: 40, history: [],
-  fetching: false, abort: null, matcher: null, authorMatcher: null, activeFilter: null,
+  fetching: false, abort: null, authorMatcher: null, activeFilter: null,
   matches: [], matchIdx: -1, opHandle: null,
+  hitRanges: new Map(), qualifying: new Set(),
 };
 
 /* ══ storage ═══════════════════════════════════════════════
@@ -916,8 +937,10 @@ const DB = {
       const req = fn(t.objectStore('videos'));
       t.onerror = () => rej(t.error);
       t.onabort = () => rej(t.error || new Error('aborted'));
-      if (req) { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }
-      else t.oncomplete = () => res(true);
+      let result = true;
+      if (req) { req.onsuccess = () => { result = req.result; }; req.onerror = () => rej(req.error); }
+      // A successful request is not durable until its transaction commits.
+      t.oncomplete = () => res(result);
     });
   },
 
@@ -998,14 +1021,12 @@ const REASONS = {
   quotaExceeded: 'Daily quota exhausted. It resets at midnight Pacific Time.',
   rateLimitExceeded: 'Rate limited. Wait a moment and try again.',
   keyInvalid: "That API key isn't valid.",
-  ipRefererBlocked: "The key is restricted and is blocking this page. Set Application " +
-                    "restrictions to 'None' in Google Cloud Console.",
+  ipRefererBlocked: 'The API refused this key for this page.',
   accessNotConfigured: "YouTube Data API v3 isn't enabled for this key's project.",
   forbidden: 'The API refused the request. Check the key allows YouTube Data API v3.',
 };
 
-async function apiGet(endpoint, params, signal) {
-  const key = LS.get('apiKey', '');
+async function apiGet(endpoint, params, signal, key = LS.get('apiKey', '')) {
   const qs = new URLSearchParams({ ...params, key });
   for (const [k, v] of [...qs]) if (v === '' || v === 'undefined') qs.delete(k);
 
@@ -1048,28 +1069,42 @@ async function apiGet(endpoint, params, signal) {
    is slower than a lower ceiling would have been. Six is a conservative pick. */
 let FANOUT_CONCURRENCY = 6;
 
-/* Runs `worker` over `items` with at most `limit` in flight. Rejects as soon as
-   any worker throws, so an abort or a fatal API error still stops everything. */
+/* Runs at most `limit` workers. A failure stops queued work; existing workers
+   settle before the original failure is reported to the caller. */
 async function runPool(items, limit, worker) {
   let next = 0;
+  let failure = null;
   const width = Math.max(1, Math.min(limit, items.length));
   const runners = [];
   for (let k = 0; k < width; k++) {
     runners.push((async () => {
       for (;;) {
+        // A rejected Promise.all only stops the caller waiting; the other
+        // runners keep pulling work unattended. Checking a shared flag is what
+        // actually stops them, and awaiting every runner before rethrowing
+        // means no request is still in flight once the caller sees the error.
+        if (failure) return;
         const i = next++;
         if (i >= items.length) return;
-        await worker(items[i]);
+        try {
+          await worker(items[i]);
+        } catch (e) {
+          failure = failure || e;
+          return;
+        }
       }
     })());
   }
   await Promise.all(runners);
+  if (failure) throw failure;
 }
 
 const sleep = (ms, signal) => new Promise((res, rej) => {
-  const t = setTimeout(res, ms);
-  if (signal) signal.addEventListener('abort',
-    () => { clearTimeout(t); rej(new DOMException('aborted', 'AbortError')); }, { once: true });
+  if (signal && signal.aborted) return rej(new DOMException('aborted', 'AbortError'));
+  const cleanup = () => signal && signal.removeEventListener('abort', abort);
+  const abort = () => { clearTimeout(t); cleanup(); rej(new DOMException('aborted', 'AbortError')); };
+  const t = setTimeout(() => { cleanup(); res(); }, ms);
+  if (signal) signal.addEventListener('abort', abort, { once: true });
 });
 
 const ID_RE = /^[A-Za-z0-9_-]{11}$/;
@@ -1084,7 +1119,7 @@ function videoId(text) {
   const parts = u.pathname.split('/').filter(Boolean);
   let id;
   if (host === 'youtu.be') id = parts[0];
-  else if (host.endsWith('youtube.com') || host.endsWith('youtube-nocookie.com')) {
+  else if (['youtube.com', 'youtube-nocookie.com'].some((d) => host === d || host.endsWith('.' + d))) {
     if (u.searchParams.get('v')) id = u.searchParams.get('v');
     else if (parts.length > 1 && ['shorts', 'embed', 'live', 'v'].includes(parts[0])) id = parts[1];
     else throw new ApiError("Couldn't find a video ID in that URL.");
@@ -1103,112 +1138,131 @@ const norm = (c, parentId) => ({
   updatedAt: (c.snippet && c.snippet.updatedAt) || '',
 });
 
+// Partial responses keep the same comment data while omitting unused API metadata.
+const COMMENT_FIELDS = 'id,snippet(authorDisplayName,authorChannelId(value),textOriginal,textDisplay,likeCount,publishedAt,updatedAt)';
+const THREAD_FIELDS = `nextPageToken,items(snippet(topLevelComment(${COMMENT_FIELDS}),totalReplyCount),replies(comments(${COMMENT_FIELDS})))`;
+const REPLY_FIELDS = `nextPageToken,items(${COMMENT_FIELDS})`;
+
 async function fetchAll(vid, signal, onProgress) {
-  const meta = await apiGet('videos', { part: 'snippet,statistics', id: vid }, signal);
-  if (!meta.items || !meta.items.length)
-    throw new ApiError("No such video, or it's private or deleted.");
-  const v = meta.items[0];
-  const expected = v.statistics && v.statistics.commentCount != null
-    ? +v.statistics.commentCount : null;
-  const videoLikes = v.statistics && v.statistics.likeCount != null
-    ? +v.statistics.likeCount : null;
-
-  // snippet.customUrl is the channel's @handle. It comes back lowercased, so a
-  // handle taken from a real comment is preferred later where one exists.
-  let creatorHandle = null;
-  try {
-    const ch = await apiGet('channels', { part: 'snippet', id: v.snippet.channelId }, signal);
-    const cu = ch.items && ch.items[0] && ch.items[0].snippet.customUrl;
-    if (cu) creatorHandle = cu.startsWith('@') ? cu : '@' + cu;
-  } catch (e) {
-    if (e.name === 'AbortError') throw e;
-    // A missing handle is not worth failing the whole fetch over.
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', abort, { once: true });
   }
-  onProgress({ phase: 'video', message: v.snippet.title });
-
-  // phase 1 — every top-level thread
-  const threads = [];
-  // Comments physically in hand. The thread endpoint returns a few replies
-  // inline per thread, so real replies land during this phase too. Counting
-  // what has arrived — never what YouTube says exists — is what keeps this
-  // number from having to be revised downward later.
-  let inHand = 0;
-  let token;
-  do {
-    const d = await apiGet('commentThreads', {
-      part: 'snippet,replies', videoId: vid, maxResults: 100,
-      order: 'time', textFormat: 'plainText', pageToken: token || '',
-    }, signal);
-    const items = d.items || [];
-    threads.push(...items);
-    for (const t of items) inHand += 1 + ((t.replies && t.replies.comments) || []).length;
-    token = d.nextPageToken;
-    onProgress({ phase: 'fetching', inHand, expected, stage: 'comments' });
-  } while (token);
-
-  // phase 2 — expand threads whose inline preview is short
-  const comments = threads.map((t) => norm(t.snippet.topLevelComment, null));
-  const repliesBy = new Map();
-  const needs = threads.filter((t) =>
-    (t.snippet.totalReplyCount || 0) > ((t.replies && t.replies.comments) || []).length);
-  let done = 0;
-
-  // Threads whose inline preview already holds every reply need no request.
-  const pending = [];
-  for (const t of threads) {
-    const tid = t.snippet.topLevelComment.id;
-    const total = t.snippet.totalReplyCount || 0;
-    const preview = (t.replies && t.replies.comments) || [];
-    if (!total) continue;
-    if (preview.length >= total) {
-      // Already counted inline during phase 1 — nothing new arrives here.
-      repliesBy.set(tid, preview.map((c) => norm(c, tid)));
-      continue;
-    }
-    pending.push({ tid, preview });
-  }
-
-  /* Each parentId is independent, so these run concurrently. Phase 1 cannot
-     be parallelised — its pageToken chain is strictly sequential — which is
-     why this is the only place concurrency helps. */
-  await runPool(pending, FANOUT_CONCURRENCY, async ({ tid, preview }) => {
-    const acc = [];
-    let rtok;
-    do {
-      const d = await apiGet('comments', {
-        part: 'snippet', parentId: tid, maxResults: 100,
-        textFormat: 'plainText', pageToken: rtok || '',
-      }, signal);
-      acc.push(...(d.items || []).map((c) => norm(c, tid)));
-      rtok = d.nextPageToken;
-    } while (rtok);
-    repliesBy.set(tid, acc);
-    // The full set replaces the inline preview, so only the surplus is new.
-    // acc.length >= preview.length always, so this can never subtract.
-    inHand += Math.max(0, acc.length - preview.length);
-    done++;
-    onProgress({ phase: 'fetching', inHand, expected, stage: 'replies' });
-  });
-
-  for (const arr of repliesBy.values()) {
-    arr.sort((a, b) => (a.publishedAt < b.publishedAt ? -1 : 1));
-    comments.push(...arr);
-  }
-
-  const payload = {
-    videoId: vid, title: v.snippet.title, channelTitle: v.snippet.channelTitle,
-    channelId: v.snippet.channelId, publishedAt: v.snippet.publishedAt,
-    thumbnail: ((v.snippet.thumbnails || {}).medium || (v.snippet.thumbnails || {}).default || {}).url || '',
-    reportedCommentCount: expected, videoLikeCount: videoLikes, creatorHandle,
-    fetchedAt: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
-    topLevelCount: threads.length,
-    replyCount: [...repliesBy.values()].reduce((n, a) => n + a.length, 0),
-    fetchedCount: comments.length, comments,
+  const requestSignal = controller.signal;
+  const active = new Set(), queue = [];
+  let nextJob = 0, failure = null, channelTask = Promise.resolve(null);
+  const tops = new Map(), repliesBy = new Map(), received = new Set();
+  let expected = null, listing = true;
+  const record = (comments) => {
+    for (const c of comments) received.add(c.id);
   };
-  onProgress({ phase: 'done', comments: threads.length,
-               replies: [...repliesBy.values()].reduce((n, a) => n + a.length, 0),
-               inHand: comments.length });
-  return payload;
+  const progress = () => {
+    if (!requestSignal.aborted) onProgress({ phase: 'fetching', inHand: received.size,
+      expected, stage: listing ? 'comments' : 'replies' });
+  };
+
+  async function expandReplies(tid) {
+    const replies = new Map();
+    let token;
+    do {
+      const d = await apiGet('comments', { part: 'snippet', parentId: tid,
+        maxResults: 100, textFormat: 'plainText', pageToken: token || '',
+        fields: REPLY_FIELDS }, requestSignal);
+      const page = (d.items || []).map((c) => norm(c, tid));
+      for (const c of page) replies.set(c.id, c);
+      record(page);
+      progress();
+      token = d.nextPageToken;
+    } while (token);
+    repliesBy.set(tid, [...replies.values()]);
+  }
+
+  // Queue replies as each thread page arrives. The next thread page and up to
+  // six reply requests can run together, without guessing pagination tokens.
+  function pump() {
+    while (!requestSignal.aborted && active.size < FANOUT_CONCURRENCY && nextJob < queue.length) {
+      const tid = queue[nextJob++];
+      const task = expandReplies(tid).catch((error) => {
+        if (!failure) failure = error;
+        controller.abort();
+      }).finally(() => {
+        active.delete(task);
+        pump();
+      });
+      active.add(task);
+    }
+  }
+
+  try {
+    const meta = await apiGet('videos', { part: 'snippet,statistics', id: vid,
+      fields: 'items(snippet(title,channelTitle,channelId,publishedAt,thumbnails),statistics(commentCount,likeCount))' }, requestSignal);
+    if (!meta.items || !meta.items.length)
+      throw new ApiError("No such video, or it's private or deleted.");
+    const v = meta.items[0];
+    expected = v.statistics && v.statistics.commentCount != null ? +v.statistics.commentCount : null;
+    const videoLikes = v.statistics && v.statistics.likeCount != null ? +v.statistics.likeCount : null;
+    onProgress({ phase: 'video', message: v.snippet.title });
+
+    // Handle lookup is optional and runs alongside the comment downloads.
+    channelTask = apiGet('channels', { part: 'snippet', id: v.snippet.channelId,
+      fields: 'items(snippet(customUrl))' }, requestSignal).then((ch) => {
+      const cu = ch.items && ch.items[0] && ch.items[0].snippet.customUrl;
+      return cu ? (cu.startsWith('@') ? cu : '@' + cu) : null;
+    }).catch(() => null);
+
+    let token;
+    do {
+      const d = await apiGet('commentThreads', { part: 'snippet,replies', videoId: vid,
+        maxResults: 100, order: 'time', textFormat: 'plainText', pageToken: token || '',
+        fields: THREAD_FIELDS }, requestSignal);
+      for (const t of d.items || []) {
+        const top = norm(t.snippet.topLevelComment, null);
+        if (tops.has(top.id)) continue;
+        tops.set(top.id, top);
+        const preview = uniqueComments((t.replies && t.replies.comments) || [])
+          .map((c) => norm(c, top.id));
+        record([top, ...preview]);
+        repliesBy.set(top.id, preview);
+        if ((t.snippet.totalReplyCount || 0) > preview.length) queue.push(top.id);
+      }
+      pump();
+      progress();
+      token = d.nextPageToken;
+    } while (token);
+    listing = false;
+
+    while (active.size) await Promise.all([...active]);
+    if (failure) throw failure;
+    const creatorHandle = await channelTask;
+    if (requestSignal.aborted) throw new DOMException('aborted', 'AbortError');
+
+    const comments = [...tops.values()];
+    for (const replies of repliesBy.values()) {
+      replies.sort(cmpDate);
+      for (const reply of replies) comments.push(reply);
+    }
+    const payload = normalizePayload({
+      videoId: vid, title: v.snippet.title, channelTitle: v.snippet.channelTitle,
+      channelId: v.snippet.channelId, publishedAt: v.snippet.publishedAt,
+      thumbnail: ((v.snippet.thumbnails || {}).medium || (v.snippet.thumbnails || {}).default || {}).url || '',
+      reportedCommentCount: expected, videoLikeCount: videoLikes, creatorHandle,
+      fetchedAt: new Date().toISOString().replace(/\.\d+Z$/, 'Z'), comments,
+    });
+    onProgress({ phase: 'done', comments: payload.topLevelCount,
+      replies: payload.replyCount, inHand: payload.fetchedCount });
+    return payload;
+  } catch (error) {
+    throw failure || error;
+  } finally {
+    // On cancellation or failure, abort and drain every request before the UI
+    // permits another download. No background jobs can leak into the next run.
+    controller.abort();
+    await Promise.all([...active]);
+    await channelTask;
+    if (signal) signal.removeEventListener('abort', abort);
+  }
 }
 
 /* ══ boot ══════════════════════════════════════════════════ */
@@ -1277,17 +1331,15 @@ async function saveKey(input, statusEl, after) {
   }
   statusEl.className = 'key-status busy';
   statusEl.innerHTML = '<span class="spinner"></span>Checking the key against the API…';
-  const prev = LS.get('apiKey', '');
-  LS.set('apiKey', key);
   try {
-    await apiGet('videos', { part: 'snippet', id: 'dQw4w9WgXcQ' });
+    await apiGet('videos', { part: 'snippet', id: 'dQw4w9WgXcQ' }, undefined, key);
+    if (!LS.set('apiKey', key)) throw new Error('Key verified, but browser storage is unavailable. Allow site storage and try again.');
     statusEl.className = 'key-status ok';
     statusEl.textContent = 'Key verified and saved.';
     input.value = '';
     paintKeyState(true);
     if (after) after();
   } catch (e) {
-    LS.set('apiKey', prev);
     statusEl.className = 'key-status err';
     statusEl.textContent = e.message;
   }
@@ -1391,7 +1443,7 @@ async function startFetch() {
     $('#fetchBtn').classList.remove('hidden');
     $('#cancelBtn').classList.add('hidden');
     $('#urlInput').disabled = false;
-    setTimeout(() => $('#progressWrap').classList.add('hidden'), 1400);
+    $('#progressWrap').classList.add('hidden');
   }
 }
 
@@ -1435,17 +1487,33 @@ function onProgress(p) {
   }
 
   if (p.phase === 'done') {
+    $('#progressWrap').classList.add('hidden');
     fill.classList.remove('indet');
     fill.style.width = '100%';
-    txt.textContent = `Done — ${(p.comments || 0).toLocaleString()} comments, ` +
-      `${(p.replies || 0).toLocaleString()} replies`;
+    txt.textContent = '';
   }
 }
 
 /* ── payload → threads ─────────────────────────────────── */
 const cmpDate = (a, b) => (a.publishedAt < b.publishedAt ? -1 : a.publishedAt > b.publishedAt ? 1 : 0);
 
+// Identity comes from the API ID, not text: distinct comments may say the same thing.
+function uniqueComments(comments) {
+  const byId = new Map();
+  for (const c of comments) byId.set(c.id, c);
+  return [...byId.values()];
+}
+
+function normalizePayload(payload) {
+  const comments = uniqueComments(payload.comments);
+  const topLevelCount = comments.reduce((n, c) => n + (c.parentId ? 0 : 1), 0);
+  return { ...payload, comments, topLevelCount,
+           replyCount: comments.length - topLevelCount, fetchedCount: comments.length };
+}
+
 function loadPayload(payload) {
+  // Also repairs previously cached downloads before filtering or rendering.
+  payload = normalizePayload(payload);
   S.payload = payload;
   const tops = [], byParent = new Map();
   for (const c of payload.comments) {
@@ -1466,12 +1534,8 @@ function loadPayload(payload) {
   $('#main').scrollTop = 0;
 }
 
-/* A shortfall against YouTube's commentCount is only worth showing when it is
-   large. Small gaps are routine: the count drifts as comments are deleted, and
-   held or spam-flagged comments are counted but never returned. A gap that is
-   both 1% of the total AND at least 20 comments is a different animal — that
-   usually means pagination stopped early, and re-fetching can recover them.
-   The absolute floor matters because on a small video 1% can be one comment. */
+/* Report substantial differences without inferring a cause from counts alone.
+   The absolute floor avoids noisy notices on small videos. */
 const GAP_NOTICE_THRESHOLD = 0.01;
 const GAP_NOTICE_FLOOR = 20;
 
@@ -1484,9 +1548,9 @@ function paintVideoHead() {
     const share = missing / rep;
     if (share >= GAP_NOTICE_THRESHOLD && missing >= GAP_NOTICE_FLOOR) {
       const pct = share < 0.1 ? (share * 100).toFixed(1) : Math.round(share * 100);
-      note = `<span class="vh-warn" data-tip="A gap this large usually means the ` +
-        `listing stopped early rather than comments being deleted or held.` +
-        `\nFetching the video again may return more.">YouTube reports ` +
+      note = `<span class="vh-warn" data-tip="The API returned fewer comments than YouTube's reported total. ` +
+        `The count alone does not establish why.` +
+        `\nFetching the video again may return a different set.">YouTube reports ` +
         `${rep.toLocaleString()} — ${missing.toLocaleString()} not returned (${pct}%)</span>`;
     }
   }
@@ -1567,8 +1631,10 @@ $('#searchBtn').addEventListener('click', applySearch);
   $('#' + id).addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
     const f = S.activeFilter;
-    const unchanged = f && id === 'searchInput' && f.query === $('#searchInput').value &&
-      f.regex === $('#regexChk').checked && f.caseSensitive === $('#caseChk').checked;
+    const unchanged = f && ['searchInput', 'authorInput'].includes(id) && f.query === $('#searchInput').value &&
+      f.regex === $('#regexChk').checked && f.caseSensitive === $('#caseChk').checked &&
+      f.author === $('#authorInput').value.trim() && f.from === $('#fromInput').value.trim() &&
+      f.to === $('#toInput').value.trim();
     if (unchanged && S.matches.length) gotoMatch(S.matchIdx + (e.shiftKey ? -1 : 1));
     else applySearch();
   }));
@@ -1583,8 +1649,13 @@ function validDate(v) {
 }
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
-function applySearch() {
+let searchToken = 0;
+
+async function applySearch() {
   if (!S.payload) return;
+  const token = ++searchToken;
+  cancelMatch();
+  status('');
   const q = $('#searchInput').value;
   // Only surrounding whitespace goes — a leading @ is part of the handle.
   const author = $('#authorInput').value.trim();
@@ -1604,31 +1675,90 @@ function applySearch() {
   }
   if (from && to && from > to) { toast('From is after To.', 'err'); return; }
 
-  let matcher = null;
-  if (q) {
-    try { matcher = new RegExp(useRegex ? q : escRe(q), cs ? 'g' : 'gi'); }
-    catch (err) {
-      $('#searchInput').classList.add('bad');
-      toast('Invalid regex: ' + err.message, 'err');
+  if (q && useRegex && q.length > REGEX_MAX_LENGTH) {
+    $('#searchInput').classList.add('bad');
+    toast(`Regex patterns are capped at ${REGEX_MAX_LENGTH} characters.`, 'err');
+    return;
+  }
+
+  /* Author matching is always a literal, case-insensitive substring: YouTube
+     handles are unique regardless of case, and channels.list lowercases
+     customUrl while comment display names keep the author's own casing, so
+     matching on case would make the Creator button find nothing. Being literal
+     also means it is safe to run here on the UI thread. */
+  const authorMatcher = author ? new RegExp(escRe(author), 'i') : null;
+  const inRange = (c) => {
+    const d = (c.publishedAt || '').slice(0, 10);
+    return (!from || d >= from) && (!to || d <= to);
+  };
+  const passesCheap = (c) =>
+    (!authorMatcher || authorMatcher.test(c.author || '')) && inRange(c);
+
+  // Only comments satisfying every cheap filter are eligible to match, so the
+  // highlights and the match index both respect the author and date fields.
+  const candidates = S.payload.comments.filter(passesCheap);
+
+  const filter = (q || author || from || to)
+    ? { query: q, author, regex: useRegex, caseSensitive: cs, from, to } : null;
+
+  const commit = (ranges, qualifying) => {
+    if (token !== searchToken) return;           // a newer search superseded this
+    S.hitRanges = ranges;
+    S.qualifying = qualifying;
+    S.authorMatcher = authorMatcher;
+    S.activeFilter = filter;
+    applyView();
+    $('#main').scrollTop = 0;
+    if (S.matches.length) gotoMatch(0, false);
+  };
+
+  if (!q) {
+    commit(new Map(), new Set(candidates.map((c) => c.id)));
+    return;
+  }
+
+  const pattern = useRegex ? q : escRe(q);
+  const flags = cs ? 'g' : 'gi';
+  const items = candidates.map((c, i) => ({ i, t: c.text || '' }));
+
+  status('Searching…');
+  let res = await runMatch(pattern, flags, items);
+  if (token !== searchToken || res.cancelled) return;
+  if (res.unavailable) {
+    if (useRegex) {
+      status('');
+      toast('Regex search is unavailable in this browser. Turn off Regex to search literal text. Results are unchanged.', 'err');
       return;
     }
+    res = await matchLiteral(q, flags, items, token);
   }
-  // Author matching is a plain case-sensitive substring test: the Aa and .*
-  // toggles govern the text field only.
-  // Always literal and case-insensitive, whatever the Aa / .* toggles say.
-  // YouTube handles are unique regardless of case (every casing of a handle
-  // resolves to the same channel), and channels.list lowercases customUrl while
-  // comment display names keep the author's own casing — so matching on case
-  // would make the Creator button find nothing.
-  const authorMatcher = author ? new RegExp(escRe(author), 'i') : null;
+  if (token !== searchToken || res.cancelled) return;
+  status('');
+  if (res.tooMany) {
+    toast('Too many matches to display. Narrow the search or date range. Results are unchanged.', 'err');
+    return;
+  }
 
-  S.matcher = matcher;
-  S.authorMatcher = authorMatcher;
-  S.activeFilter = (q || author || from || to)
-    ? { query: q, author, regex: useRegex, caseSensitive: cs, from, to } : null;
-  applyView();
-  $('#main').scrollTop = 0;
-  if (S.matches.length) gotoMatch(0, false);
+  if (res.timedOut) {
+    $('#searchInput').classList.add('bad');
+    toast('That pattern took too long and was stopped. Results are unchanged — '
+        + 'try a simpler expression.', 'err');
+    return;
+  }
+  if (res.error) {
+    $('#searchInput').classList.add('bad');
+    toast('Invalid regex: ' + res.error, 'err');
+    return;
+  }
+
+  const ranges = new Map();
+  const qualifying = new Set();
+  for (const [idx, rs] of res.result) {
+    const c = candidates[idx];
+    ranges.set(c.id, rs);
+    qualifying.add(c.id);
+  }
+  commit(ranges, qualifying);
 }
 
 function resetFields() {
@@ -1637,23 +1767,110 @@ function resetFields() {
   $('#caseChk').checked = false; $('#regexChk').checked = false;
   ['#searchInput', '#authorInput', '#fromInput', '#toInput']
     .forEach((s) => $(s).classList.remove('bad'));
-  S.matcher = null; S.authorMatcher = null; S.activeFilter = null;
+  S.authorMatcher = null; S.activeFilter = null;
+  S.hitRanges = new Map(); S.qualifying = new Set();
+  searchToken++;
+  cancelMatch();
+  status('');
 }
 function resetSearch() {                    // sort is deliberately preserved
   resetFields(); applyView(); $('#main').scrollTop = 0;
 }
 
-function hits(t) { if (!S.matcher) return false; S.matcher.lastIndex = 0; return S.matcher.test(t || ''); }
+/* Each search owns a worker and a completion callback. Cancelling always
+   settles the old promise before a new job is started. */
+const MATCH_BUDGET_MS = 5000;
+const REGEX_MAX_LENGTH = 200;
+const MAX_MATCHES = 200000;
+let activeMatch = null;
+let workerUnavailable = false;
+
+function collectMatches(pattern, flags, items, limit) {
+  let re;
+  try { re = new RegExp(pattern, flags); }
+  catch (err) { return { error: err.message }; }
+  const out = [];
+  let total = 0;
+  for (const it of items) {
+    re.lastIndex = 0;
+    const text = it.t || '', ranges = [];
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      // Zero-width matches have no visible text to highlight.
+      if (!m[0].length) { re.lastIndex++; continue; }
+      if (++total > limit) return { tooMany: true };
+      ranges.push([m.index, m.index + m[0].length]);
+    }
+    if (ranges.length) out.push([it.i, ranges]);
+  }
+  return { result: out };
+}
+const MATCH_WORKER_SRC = collectMatches.toString() + `
+onmessage = function (e) {
+  const d = e.data;
+  postMessage(collectMatches(d.pattern, d.flags, d.items, d.limit));
+};`;
+
+function cancelMatch() {
+  if (activeMatch) activeMatch.finish({ cancelled: true });
+}
+
+function runMatch(pattern, flags, items) {
+  cancelMatch();
+  if (workerUnavailable) return Promise.resolve({ unavailable: true });
+  return new Promise((resolve) => {
+    const job = { worker: null, url: null, timer: null, finish: null };
+    let settled = false;
+    job.finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(job.timer);
+      if (job.worker) job.worker.terminate();
+      if (job.url) URL.revokeObjectURL(job.url);
+      if (activeMatch === job) activeMatch = null;
+      resolve(result);
+    };
+    activeMatch = job;
+    try {
+      job.url = URL.createObjectURL(new Blob([MATCH_WORKER_SRC], { type: 'text/javascript' }));
+      job.worker = new Worker(job.url);
+      job.worker.onmessage = (e) => job.finish(e.data);
+      job.worker.onerror = (e) => {
+        e.preventDefault();
+        workerUnavailable = true;
+        job.finish({ unavailable: true });
+      };
+      job.worker.onmessageerror = () => job.finish({ error: 'Unable to read search results.' });
+      job.timer = setTimeout(() => job.finish({ timedOut: true }), MATCH_BUDGET_MS);
+      job.worker.postMessage({ pattern, flags, items, limit: MAX_MATCHES });
+    } catch {
+      workerUnavailable = true;
+      job.finish({ unavailable: true });
+    }
+  });
+}
+
+/* Worker failure permits only escaped literal text on the UI thread. Yield
+   between batches so Reset and newer searches can cancel the fallback too. */
+async function matchLiteral(query, flags, items, token) {
+  const out = [];
+  let remaining = MAX_MATCHES;
+  for (let i = 0; i < items.length; i += 100) {
+    if (token !== searchToken) return { cancelled: true };
+    const batch = collectMatches(escRe(query), flags, items.slice(i, i + 100), remaining);
+    if (!batch.result) return batch;
+    for (const entry of batch.result) { remaining -= entry[1].length; out.push(entry); }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return { result: out };
+}
 
 function applyView() {
   let list = S.threads;
-  const f = S.activeFilter;
-  if (f) {
-    const lo = f.from ? f.from + 'T00:00:00.000Z' : null;
-    const hi = f.to ? f.to + 'T23:59:59.999Z' : null;
-    const inRange = (c) => (!lo || c.publishedAt >= lo) && (!hi || c.publishedAt <= hi);
-    const byAuthor = (c) => !S.authorMatcher || S.authorMatcher.test(c.author || '');
-    const ok = (c) => (!S.matcher || hits(c.text)) && byAuthor(c) && inRange(c);
+  if (S.activeFilter) {
+    // Every criterion was already applied when S.qualifying was built, so a
+    // thread survives when any single comment in it satisfies all of them.
+    const ok = (c) => S.qualifying.has(c.id);
     list = S.threads.filter((t) => ok(t.comment) || t.replies.some(ok));
   }
   S.view = sortThreads(list);
@@ -1662,20 +1879,30 @@ function applyView() {
   renderReset();
 }
 
-/* Flat list of every highlight in view order, so prev/next can walk them. */
+
+/* Text searches navigate occurrences; other filters navigate qualifying comments. */
 function buildMatchIndex() {
   S.matches = [];
   S.matchIdx = -1;
-  if (!S.matcher) return;
+  if (!S.activeFilter) return;
+  const seen = new Set();
   S.view.forEach((t, ti) => {
     const scan = (c) => {
-      const n = countHits(c.text || '');
-      for (let k = 0; k < n; k++) S.matches.push({ ti, cid: c.id, k });
+      if (!S.qualifying.has(c.id)) return;      // filtered-out comments never match
+      if (seen.has(c.id)) return;
+      seen.add(c.id);
+      if (!S.activeFilter.query) {
+        S.matches.push({ ti, cid: c.id, k: null });
+        return;
+      }
+      const rs = S.hitRanges.get(c.id);
+      if (rs) for (let k = 0; k < rs.length; k++) S.matches.push({ ti, cid: c.id, k });
     };
     scan(t.comment);
     t.replies.forEach(scan);
   });
 }
+
 
 function gotoMatch(i, smooth) {
   if (!S.matches.length) return;
@@ -1695,10 +1922,12 @@ function gotoMatch(i, smooth) {
   const more = wrap && wrap.querySelector('.rep-toggle');
   if (more && host.closest('.rep-box') && !host.offsetParent) more.click();
 
-  const marks = host.querySelectorAll('mark');
-  const target = marks[m.k] || marks[0] || host;
+  const marks = m.k === null ? [] : host.querySelectorAll(`mark[data-match="${m.k}"]`);
+  const target = marks[0] || host.querySelector('.cm-author') || host;
   $$('#list mark.active').forEach((x) => x.classList.remove('active'));
-  if (target.tagName === 'MARK') target.classList.add('active');
+  $$('#list .au-active').forEach((x) => x.classList.remove('au-active'));
+  marks.forEach((mark) => mark.classList.add('active'));
+  if (m.k === null) target.classList.add('au-active');
   target.scrollIntoView({ block: 'center', behavior: smooth === false ? 'auto' : 'smooth' });
   paintFindBar();
 }
@@ -1711,33 +1940,27 @@ function paintFindBar() {
   const f = S.activeFilter;
   if (!f) { bar.classList.add('hidden'); return; }
 
-  const hasText = !!f.query;
   const total = S.matches.length;
-  $('#findPrev').classList.toggle('hidden', !hasText);
-  $('#findNext').classList.toggle('hidden', !hasText);
+  $('#findPrev').classList.remove('hidden');
+  $('#findNext').classList.remove('hidden');
   $('#findPrev').disabled = total === 0;
   $('#findNext').disabled = total === 0;
 
-  if (hasText) {
-    $('#findCount').textContent = total
-      ? `${(S.matchIdx + 1).toLocaleString()} of ${total.toLocaleString()}`
-      : 'No matches';
-    $('#findCount').classList.toggle('none', total === 0);
-  } else {
-    const shown = S.view.reduce((n, t) => n + 1 + t.replies.length, 0);
-    $('#findCount').textContent =
-      `${shown.toLocaleString()} ${shown === 1 ? 'comment' : 'comments'}`;
-    $('#findCount').classList.remove('none');
-  }
+  $('#findCount').textContent = total
+    ? `${Math.max(1, S.matchIdx + 1).toLocaleString()} of ${total.toLocaleString()}`
+    : 'No matches';
+  $('#findCount').classList.toggle('none', total === 0);
 
   const extra = [];
   if (f.author) extra.push(`by ${f.author}`);
   if (f.from || f.to) extra.push(`${f.from} → ${f.to}`);
-  if (hasText && total) extra.push(
-    `in ${S.view.length.toLocaleString()} ${S.view.length === 1 ? 'thread' : 'threads'}`);
   $('#findExtra').textContent = extra.join(' · ');
   bar.classList.remove('hidden');
 }
+
+$('#toTop').addEventListener('click', () => {
+  $('#main').scrollTo({ top: 0, behavior: 'auto' });
+});
 
 $('#findNext').addEventListener('click', () => gotoMatch(S.matchIdx + 1));
 $('#findPrev').addEventListener('click', () => gotoMatch(S.matchIdx - 1));
@@ -1749,6 +1972,10 @@ function renderReset() {
   renderMore();
 }
 function renderMore() {
+  // The sentinel is on screen at load, so the observer fires before anything
+  // is loaded; without this the empty state gets an "end of list" message
+  // underneath it.
+  if (!S.payload) return;
   if (S.rendered >= S.view.length) {
     const e = $('#listEnd');
     e.classList.remove('hidden');
@@ -1883,7 +2110,8 @@ function renderComment(c, isReply) {
 
   const text = document.createElement('div');
   text.className = 'cm-text';
-  buildText(text, c.text || '');
+  buildText(text, c.text || '',
+            S.qualifying.has(c.id) ? S.hitRanges.get(c.id) : null);
   body.appendChild(text);
 
   if (c.likeCount > 0) {
@@ -1901,65 +2129,52 @@ function renderComment(c, isReply) {
   return el;
 }
 
-/* Links and highlights never nest: URL spans win any overlap.
-   computeSpans is the single source of truth so the rendered <mark>s and the
-   navigable match index can never disagree about how many hits there are. */
+/* Used to find links in comment text. Fixed and safe — never user-supplied. */
 const URL_RE = /(https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+)/gi;
 
-function computeSpans(raw) {
-  const spans = [];
+/* Renders text with links and highlights. A hit inside a URL is marked inside
+   the anchor rather than discarded, so URL text is searchable and navigable.
+   `ranges` comes from the matcher; null means highlight nothing, which is how
+   comments failing the author or date filter are rendered. */
+function buildText(container, raw, ranges) {
+  const urls = [];
   URL_RE.lastIndex = 0;
   let m;
-  while ((m = URL_RE.exec(raw)) !== null) spans.push({ s: m.index, e: m.index + m[0].length, kind: 'url' });
-  if (S.matcher) {
-    S.matcher.lastIndex = 0;
-    let k, guard = 0;
-    while ((k = S.matcher.exec(raw)) !== null && guard++ < 5000) {
-      if (!k[0].length) { S.matcher.lastIndex++; continue; }
-      const s = k.index, e = s + k[0].length;
-      if (!spans.some((sp) => sp.kind === 'url' && s < sp.e && e > sp.s)) spans.push({ s, e, kind: 'hit' });
-    }
-  }
-  spans.sort((a, b) => a.s - b.s || a.e - b.e);
-  // Drop anything swallowed by an earlier span so counts match what renders.
-  const out = [];
-  let end = 0;
-  for (const sp of spans) {
-    if (sp.s < end) continue;
-    out.push(sp);
-    end = sp.e;
-  }
-  return out;
-}
+  while ((m = URL_RE.exec(raw)) !== null) urls.push([m.index, m.index + m[0].length]);
+  const hits = ranges || [];
 
-function countHits(raw) {
-  if (!S.matcher) return 0;
-  let n = 0;
-  for (const sp of computeSpans(raw)) if (sp.kind === 'hit') n++;
-  return n;
-}
-
-function buildText(container, raw) {
-  const spans = computeSpans(raw);
-  let pos = 0;
-  for (const sp of spans) {
-    if (sp.s > pos) container.appendChild(document.createTextNode(raw.slice(pos, sp.s)));
-    const piece = raw.slice(sp.s, sp.e);
-    if (sp.kind === 'url') {
-      const a = document.createElement('a');
-      a.href = /^https?:/i.test(piece) ? piece : 'https://' + piece;
-      a.textContent = piece; a.target = '_blank'; a.rel = 'noopener nofollow';
-      a.title = a.href;
-      container.appendChild(a);
-    } else {
+  const emit = (from, to, target) => {
+    let p = from;
+    for (let k = 0; k < hits.length; k++) {
+      const [hs, he] = hits[k];
+      if (he <= from) continue;
+      if (hs >= to) break;
+      const a = Math.max(hs, from), b = Math.min(he, to);
+      if (a > p) target.appendChild(document.createTextNode(raw.slice(p, a)));
       const mk = document.createElement('mark');
-      mk.textContent = piece;
-      container.appendChild(mk);
+      mk.dataset.match = k;
+      mk.textContent = raw.slice(a, b);
+      target.appendChild(mk);
+      p = b;
     }
-    pos = sp.e;
+    if (p < to) target.appendChild(document.createTextNode(raw.slice(p, to)));
+  };
+
+  let pos = 0;
+  for (const [us, ue] of urls) {
+    if (us > pos) emit(pos, us, container);
+    const piece = raw.slice(us, ue);
+    const a = document.createElement('a');
+    a.href = /^https?:/i.test(piece) ? piece : 'https://' + piece;
+    a.target = '_blank'; a.rel = 'noopener nofollow';
+    a.title = a.href;
+    emit(us, ue, a);
+    container.appendChild(a);
+    pos = ue;
   }
-  if (pos < raw.length) container.appendChild(document.createTextNode(raw.slice(pos)));
+  if (pos < raw.length) emit(pos, raw.length, container);
 }
+
 
 const THUMB = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" ' +
   'd="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 ' +
@@ -2068,6 +2283,7 @@ function paintHistory() {
 }
 
 async function openHistory(h) {
+  if (S.fetching) { toast('Finish or cancel the current download before opening another video.'); return; }
   const d = await DB.get(h.videoId);
   if (!d) {
     confirmBox('Re-fetch this video?',
@@ -2077,6 +2293,7 @@ async function openHistory(h) {
     return;
   }
   loadPayload(unpack(d));
+  setUrl('https://www.youtube.com/watch?v=' + h.videoId);
   paintHistory();
   status('Loaded from cache');
 }
@@ -2272,18 +2489,23 @@ function buildJSON() {
   }, null, 2);
 }
 
+/* Detect on the raw text and escape each piece, mirroring buildText(). The
+   previous order — escape first, then match URLs in the escaped string — was
+   safe only because esc() escapes quotes; it would break silently if esc()
+   ever changed. */
 function richHTML(text) {
+  const raw = text || '';
   let out = '', pos = 0, m;
-  const e = esc(text || '');
   URL_RE.lastIndex = 0;
-  while ((m = URL_RE.exec(e)) !== null) {
-    out += e.slice(pos, m.index);
-    const raw = m[0];
-    const href = /^https?:/i.test(raw) ? raw : 'https://' + raw;
-    out += `<a href="${href}" rel="noopener">${raw}</a>`;
-    pos = m.index + raw.length;
+  while ((m = URL_RE.exec(raw)) !== null) {
+    out += esc(raw.slice(pos, m.index));
+    const piece = m[0];
+    const href = /^https?:/i.test(piece) ? piece : 'https://' + piece;
+    out += `<a href="${esc(href)}" rel="noopener">${esc(piece)}</a>`;
+    pos = m.index + piece.length;
   }
-  return (out + e.slice(pos)).replace(/\n/g, '<br>');
+  out += esc(raw.slice(pos));
+  return out.replace(/\n/g, '<br>');
 }
 
 function buildHTML() {
@@ -2300,11 +2522,11 @@ function buildHTML() {
   if (v.from || v.to) filt.push(`dates ${v.from || '…'} → ${v.to || '…'}`);
 
   const block = (c, isRep) => {
-    const perma = `https://www.youtube.com/watch?v=${p.videoId}&lc=${c.id}`;
+    const perma = `https://www.youtube.com/watch?v=${esc(p.videoId)}&lc=${esc(c.id)}`;
     const name = c.channelId
-      ? `<a class="au" href="https://www.youtube.com/channel/${c.channelId}">${esc(c.author)}</a>`
+      ? `<a class="au" href="https://www.youtube.com/channel/${esc(c.channelId)}">${esc(c.author)}</a>`
       : `<span class="au">${esc(c.author)}</span>`;
-    const av = `<div class="av" style="background:${avatarColor(c.channelId || c.author || c.id)}"` +
+    const av = `<div class="av" style="background:${esc(avatarColor(c.channelId || c.author || c.id))}"` +
       `>${esc(initial(c.author))}</div>`;
     return `<div class="c${isRep ? ' r' : ''}">${av}<div class="cb"><div class="h">${name} ` +
       `<a class="ts" href="${perma}">${fmtUTC(c.publishedAt)}</a>` +
@@ -2356,7 +2578,7 @@ h1{font-size:20px;line-height:1.3;margin:0 0 4px;font-weight:650}
 .t{white-space:pre-wrap;overflow-wrap:anywhere}
 a{color:${ac}}</style></head><body><div class="doc">
 <h1>${esc(p.title)}</h1><div class="meta">${esc(p.channelTitle)} ·
-<a href="https://www.youtube.com/watch?v=${p.videoId}">youtube.com/watch?v=${p.videoId}</a><br>
+<a href="https://www.youtube.com/watch?v=${esc(p.videoId)}">youtube.com/watch?v=${esc(p.videoId)}</a><br>
 ${total.toLocaleString()} comments shown · sorted by ${v.sort}<br>Filter: ${filt.length ? filt.join('; ') : 'no filter — all comments'}<br>
 Fetched ${fmtUTC(p.fetchedAt)} · exported ${fmtUTC(new Date().toISOString())}</div>
 ${body}</div>
@@ -2412,7 +2634,9 @@ function exportPdf() {
       const v = viewMeta(), p = S.payload;
       const filt = [];
       if (v.query) filt.push(`text “${esc(v.query)}”`);
-      if (v.from || v.to) filt.push(`${v.from} → ${v.to}`);
+      if (v.author) filt.push(`author “${esc(v.author)}”`);
+      if (v.query) filt.push(`${v.regex ? 'regex' : 'literal'}, ${v.caseSensitive ? 'case-sensitive' : 'case-insensitive'}`);
+      if (v.from || v.to) filt.push(`${v.from} → ${v.to} (UTC)`);
       $('#printHead').innerHTML = `<h1>${esc(p.title)}</h1><div class="ph-meta">
         ${esc(p.channelTitle)} · youtube.com/watch?v=${esc(p.videoId)}<br>
         ${S.view.length.toLocaleString()} threads · ${n.toLocaleString()} comments ·
@@ -2421,9 +2645,11 @@ function exportPdf() {
 
       setTimeout(() => {
         status('');
+        // Browsers differ in whether print() blocks; afterprint owns cleanup.
+        window.addEventListener('afterprint', () => {
+          $('#printHead').innerHTML = ''; renderReset();
+        }, { once: true });
         window.print();
-        // Restore the chunked view afterwards so scrolling stays fast.
-        setTimeout(() => { $('#printHead').innerHTML = ''; renderReset(); }, 400);
       }, 350);
     }, 40);
   };
