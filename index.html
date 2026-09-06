@@ -213,6 +213,7 @@ a:hover { text-decoration: underline; }
 .cm.reply { margin-left: 30px; }
 .av { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; display: grid;
   place-items: center; font-weight: 700; font-size: 13px; color: #fff; user-select: none; }
+.av canvas { display: block; width: 100%; height: 100%; border-radius: 50%; }
 .cm.reply .av { width: 26px; height: 26px; font-size: 11px; }
 .cm-body { min-width: 0; flex: 1; }
 .cm-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
@@ -592,6 +593,67 @@ a:hover { text-decoration: underline; }
   text-decoration: underline; }
 .cm-text a mark.active { background: var(--hit-active); color: var(--hit-active-ink); }
 
+
+/* Avatar choice: shared by onboarding and settings. */
+.ob-card.avatar-step { max-width: 736px; }
+.avatar-choices { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px; }
+.avatar-choice { display: flex; flex-direction: column; gap: 22px; min-width: 0; padding: 20px 17px;
+  border: 2px solid var(--rule); border-radius: 10px; background: var(--bg); color: var(--ink);
+  text-align: left; cursor: pointer; font: inherit; }
+.avatar-choice[aria-pressed="true"] { border-color: var(--accent); }
+.avatar-choice:hover:not(:disabled) { background: color-mix(in srgb,var(--accent) 3%,var(--bg)); }
+.avatar-choice:disabled { opacity: .55; cursor: wait; }
+.avatar-choice-title { font-weight: 600; }
+.avatar-example { display: flex; gap: 15px; align-items: flex-start; min-width: 0; padding: 8px 0 20px; border-bottom: 1px solid var(--rule); }
+.avatar-example-picture { display: grid; place-items: center; width: 64px; height: 64px; flex: 0 0 64px; border-radius: 50%; overflow: hidden; }
+.avatar-example-picture img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.avatar-example-picture.initial { background: hsl(17 57% 42%); color: #fff; font-size: 30px; font-weight: 600; }
+.avatar-example-copy { display: flex; flex-direction: column; gap: 9px; min-width: 0; font-size: 26px; line-height: 1.2; }
+.avatar-example-handle { font-weight: 600; }
+.avatar-example-text { color: var(--ink-2); }
+.avatar-details { display: flex; flex-direction: column; gap: 10px; color: var(--muted); }
+.avatar-warning { display: flex; align-items: center; gap: 8px; color: var(--warn); }
+.avatar-warning svg { width: 16px; height: 16px; flex: 0 0 16px; }
+.avatar-later { margin: 20px 0 0; color: var(--muted); }
+.avatar-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+.avatar-cache-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.avatar-setting-note { color: var(--muted); margin: 12px 0 0; }
+.progress-caption { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-top: 6px; }
+.progress-caption #progressText { margin-top: 0; }
+/* Single-column settings with simple text-only avatar choices. */
+#settings { padding: 16px; }
+#settings .modal { display: block; max-width: 560px; max-height: calc(100dvh - 32px); padding: 18px 20px; }
+#settings section { display: block; width: 100%; padding: 12px 0; }
+#settings #storageStats { display: block; }
+#settings .settings-storage { padding-bottom: 0; }
+#settings .theme-choices.compact .theme-choice { display: flex; align-items: center; justify-content: center; padding: 7px 10px; gap: 9px; }
+#settings .theme-choices.compact .swatch { flex: 0 0 38px; width: 38px; height: 28px; padding: 5px; gap: 2px; }
+#settings .theme-choices.compact .swatch i { height: 3px; }
+#settings .avatar-choices { gap: 8px; }
+#settings .avatar-choice { display: block; padding: 8px 12px; font-size: 13px; text-align: center; }
+#settings .avatar-setting-note { font-size: 12px; margin-top: 9px; }
+#settings .avatar-cache-actions { margin-top: 10px; gap: 8px; }
+#settings .avatar-cache-actions .btn { font-size: 12px; padding: 5px 9px; }
+#settings #avatarSettingStatus:empty, #settings #setStatus:empty { display: none; }
+#settings .kv { font-size: 12px; padding: 4px 0; }
+#settings .inline-note { margin-bottom: 0; }
+@media (max-width: 720px) {
+  .avatar-choice { padding: 18px 12px; }
+  .avatar-example { gap: 12px; }
+  .avatar-example-picture { width: 56px; height: 56px; flex-basis: 56px; }
+  .avatar-example-copy { font-size: 22px; }
+}
+@media (max-width: 570px) {
+  #onboard { padding: 12px; }
+  #settings { padding: 12px; }
+  #settings .modal { padding: 18px 14px; }
+  .ob-card.avatar-step { padding: 18px 14px; }
+  .avatar-choices { gap: 10px; }
+  .avatar-choice { padding: 16px 10px; gap: 18px; }
+  .avatar-example { flex-direction: column; }
+  .avatar-example-picture { width: 64px; height: 64px; flex-basis: 64px; }
+}
+
 </style>
 </head>
 <body>
@@ -624,6 +686,13 @@ a:hover { text-decoration: underline; }
       </p>
       <button class="btn ghost small" id="obSkip">Skip for now</button>
     </div>
+    <div class="ob-step hidden" data-step="avatars">
+      <h1>Choose your avatars</h1>
+      <p class="sub">How would you like comments to look?</p>
+      <div id="obAvatarChoices" class="avatar-choices" role="group" aria-label="Avatar style"></div>
+      <p class="avatar-later">You can change this later in settings.</p>
+      <div class="avatar-footer"><button class="btn primary" id="obAvatarFinish">Finish setup</button></div>
+    </div>
   </div>
 </div>
 
@@ -634,9 +703,8 @@ a:hover { text-decoration: underline; }
       <button class="icon-btn" id="setClose" title="Close" aria-label="Close settings">✕</button>
     </header>
 
-    <section>
+    <section class="settings-api">
       <h3>API key</h3>
-      <p class="sub">Checked against the API before it's saved, so you know it works.</p>
       <div class="current-key" id="currentKey"></div>
       <div class="key-row">
         <input type="text" id="setKey" placeholder="API key" spellcheck="false" autocomplete="off">
@@ -649,7 +717,7 @@ a:hover { text-decoration: underline; }
       </p>
     </section>
 
-    <section>
+    <section class="settings-theme">
       <h3>Theme</h3>
       <div class="theme-choices compact">
         <button class="theme-choice" data-theme-pick="light">
@@ -661,7 +729,18 @@ a:hover { text-decoration: underline; }
       </div>
     </section>
 
-    <section>
+    <section class="settings-avatars">
+      <h3>Avatars</h3>
+      <div id="setAvatarChoices" class="avatar-choices" role="group" aria-label="Avatar style">
+        <button type="button" class="avatar-choice" data-avatar-mode="false" aria-pressed="true">No avatars</button>
+        <button type="button" class="avatar-choice" data-avatar-mode="true" aria-pressed="false">Real avatars</button>
+      </div>
+      <p class="avatar-setting-note">Turning off real avatars automatically clears cached images. Your comments stay saved.</p>
+      <div class="avatar-cache-actions"><button class="btn ghost danger-text" id="wipeAvatarCache">Wipe cached images</button><button class="btn ghost small hidden" id="setAvatarSkip">Skip</button></div>
+      <p id="avatarSettingStatus" class="avatar-setting-note" role="status"></p>
+    </section>
+
+    <section class="settings-storage">
       <h3>Stored data</h3>
       <div id="storageStats"></div>
       <p class="inline-note">When storage fills up, the oldest cached video is dropped
@@ -669,6 +748,21 @@ a:hover { text-decoration: underline; }
     </section>
   </div>
 </div>
+
+<template id="avatarChoiceTemplate">
+  <button type="button" class="avatar-choice" data-avatar-mode="false" aria-pressed="true" aria-label="No avatars">
+    <span class="avatar-choice-title">No avatars</span>
+    <span class="avatar-example"><span class="avatar-example-picture initial" aria-hidden="true">M</span><span class="avatar-example-copy"><span class="avatar-example-handle">@Mido_</span><span class="avatar-example-text">Lorem ipsum</span></span></span>
+    <span class="avatar-details"><span>Minimal storage use</span><span>Faster loading times</span></span>
+  </button>
+  <button type="button" class="avatar-choice" data-avatar-mode="true" aria-pressed="false" aria-label="Real avatars">
+    <span class="avatar-choice-title">Real avatars</span>
+    <span class="avatar-example"><span class="avatar-example-picture"><img src="data:image/png;base64,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" width="64" height="64" alt="Mido’s YouTube avatar"></span><span class="avatar-example-copy"><span class="avatar-example-handle">@Mido_</span><span class="avatar-example-text">Lorem ipsum</span></span></span>
+    <span class="avatar-details"><span class="avatar-warning"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10.3 3.8-8 14a2 2 0 0 0 1.7 3h16a2 2 0 0 0 1.7-3l-8-14a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/></svg><span>Uses much more storage</span></span><span class="avatar-warning"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10.3 3.8-8 14a2 2 0 0 0 1.7 3h16a2 2 0 0 0 1.7-3l-8-14a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/></svg><span>Slower loading times</span></span><span>Same API quota cost</span></span>
+  </button>
+</template>
 
 <!-- ══ confirm ══ -->
 <div id="confirm" class="overlay hidden">
@@ -709,7 +803,7 @@ a:hover { text-decoration: underline; }
 
   <div id="progressWrap" class="hidden">
     <div id="progressBar"><span id="progressFill"></span></div>
-    <div id="progressText"></div>
+    <div class="progress-caption"><div id="progressText"></div><button class="btn ghost small hidden" id="skipAvatarsBtn">Skip</button></div>
   </div>
 
   <div id="body">
@@ -839,6 +933,7 @@ const NS = 'ytce.';                        // localStorage prefix
 const S = {
   payload: null, threads: [], view: [], sort: 'top',
   rendered: 0, chunk: 40, history: [],
+  realAvatars: false, avatarBusy: false, skipAvatars: null,
   fetching: false, abort: null, authorMatcher: null, activeFilter: null,
   matches: [], matchIdx: -1, opHandle: null,
   hitRanges: new Map(), qualifying: new Set(),
@@ -889,7 +984,7 @@ function pack(p) {
   const key = (c) => c.channelId + '\u0000' + c.author;
   const aidx = (c) => {
     const k = key(c);
-    if (!idx.has(k)) { idx.set(k, authors.length); authors.push([c.author, c.channelId]); }
+    if (!idx.has(k)) { idx.set(k, authors.length); authors.push([c.author, c.channelId, c.avatarUrl || '']); }
     return idx.get(k);
   };
   const pos = new Map();
@@ -903,6 +998,7 @@ function pack(p) {
          fetchedAt: p.fetchedAt,
          topLevelCount: p.topLevelCount,
          replyCount: p.replyCount, fetchedCount: p.fetchedCount },
+    avatars: S.realAvatars ? (p.avatars || {}) : {},
     a: authors,
     c: p.comments.map((c) => [
       c.id, aidx(c), c.text, c.likeCount, secs(c.publishedAt),
@@ -916,9 +1012,11 @@ function unpack(d) {
   const ids = d.c.map((t) => t[0]);
   return {
     ...d.m,
+    avatars: d.avatars || {},
     comments: d.c.map((t) => ({
       id: t[0], parentId: t[6] >= 0 ? ids[t[6]] : null,
       author: d.a[t[1]][0], channelId: d.a[t[1]][1],
+      avatarUrl: d.a[t[1]][2] || '',
       text: t[2], likeCount: t[3],
       publishedAt: iso(t[4]), updatedAt: t[5] ? iso(t[5]) : iso(t[4]),
     })),
@@ -1017,6 +1115,35 @@ const DB = {
     if (this.mode === 'indexeddb') { try { await this._tx('readwrite', (s) => s.clear()); } catch {} }
     else LS.keys().filter((k) => k.startsWith('vid.')).forEach((k) => LS.del(k));
     this.ids.clear();
+  },
+
+  async clearAvatars() {
+    if (this.mode === 'indexeddb') {
+      await new Promise((resolve, reject) => {
+        const tx = this.db.transaction('videos', 'readwrite');
+        const req = tx.objectStore('videos').openCursor();
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (!cursor) return;
+          const value = cursor.value;
+          if (value.avatars && Object.keys(value.avatars).length) {
+            value.avatars = {};
+            cursor.update(value);
+          }
+          cursor.continue();
+        };
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error || new Error('Could not clear cached images.'));
+        tx.onabort = () => reject(tx.error || new Error('Could not clear cached images.'));
+      });
+    }
+    // Also scrub fallback copies left by a previous localStorage session.
+    for (const key of LS.keys().filter(k => k.startsWith('vid.'))) {
+      const packed = LS.get(key, null);
+      if (!packed || !packed.avatars || !Object.keys(packed.avatars).length) continue;
+      packed.avatars = {};
+      if (!LS.set(key, packed)) throw new Error('Could not clear all cached images.');
+    }
   },
 
   async usage() {
@@ -1152,6 +1279,7 @@ function videoId(text) {
 const norm = (c, parentId) => ({
   id: c.id, parentId,
   author: (c.snippet && c.snippet.authorDisplayName) || '',
+  avatarUrl: (c.snippet && c.snippet.authorProfileImageUrl) || '',
   channelId: (c.snippet && c.snippet.authorChannelId && c.snippet.authorChannelId.value) || '',
   text: (c.snippet && (c.snippet.textOriginal || c.snippet.textDisplay)) || '',
   likeCount: (c.snippet && c.snippet.likeCount) || 0,
@@ -1160,7 +1288,7 @@ const norm = (c, parentId) => ({
 });
 
 // Partial responses keep the same comment data while omitting unused API metadata.
-const COMMENT_FIELDS = 'id,snippet(authorDisplayName,authorChannelId(value),textOriginal,textDisplay,likeCount,publishedAt,updatedAt)';
+const COMMENT_FIELDS = 'id,snippet(authorDisplayName,authorProfileImageUrl,authorChannelId(value),textOriginal,textDisplay,likeCount,publishedAt,updatedAt)';
 const THREAD_FIELDS = `nextPageToken,items(snippet(topLevelComment(${COMMENT_FIELDS}),totalReplyCount),replies(comments(${COMMENT_FIELDS})))`;
 const REPLY_FIELDS = `nextPageToken,items(${COMMENT_FIELDS})`;
 
@@ -1172,12 +1300,14 @@ async function fetchAll(vid, signal, onProgress) {
     else signal.addEventListener('abort', abort, { once: true });
   }
   const requestSignal = controller.signal;
+  const avatars = createAvatarQueue(requestSignal, { enabled: S.realAvatars });
   const active = new Set(), queue = [];
   let nextJob = 0, failure = null, channelTask = Promise.resolve(null);
   const tops = new Map(), repliesBy = new Map(), received = new Set();
   let expected = null, listing = true;
   const record = (comments) => {
     for (const c of comments) received.add(c.id);
+    avatars.add(comments);
   };
   const progress = () => {
     if (!requestSignal.aborted) onProgress({ phase: 'fetching', inHand: received.size,
@@ -1271,6 +1401,7 @@ async function fetchAll(vid, signal, onProgress) {
       reportedCommentCount: expected, videoLikeCount: videoLikes, creatorHandle,
       fetchedAt: new Date().toISOString().replace(/\.\d+Z$/, 'Z'), comments,
     });
+    await avatars.finish(payload, onProgress);
     onProgress({ phase: 'done', comments: payload.topLevelCount,
       replies: payload.replyCount, inHand: payload.fetchedCount });
     return payload;
@@ -1281,6 +1412,7 @@ async function fetchAll(vid, signal, onProgress) {
     // permits another download. No background jobs can leak into the next run.
     controller.abort();
     await Promise.all([...active]);
+    await avatars.drain();
     await channelTask;
     if (signal) signal.removeEventListener('abort', abort);
   }
@@ -1288,7 +1420,17 @@ async function fetchAll(vid, signal, onProgress) {
 
 /* ══ boot ══════════════════════════════════════════════════ */
 async function boot() {
+  S.avatarBusy = true;
+  paintAvatarControls();
   await DB.init();
+  S.realAvatars = LS.get('realAvatars', false) === true;
+  onboardAvatarMode = S.realAvatars;
+  if (!S.realAvatars) {
+    try { await clearAvatarCache(); }
+    catch (e) { toast(e.message, 'err'); }
+  }
+  S.avatarBusy = false;
+  paintAvatarControls();
   const theme = LS.get('theme', null);
   applyTheme(theme || 'dark');
   S.sort = LS.get('sort', 'top');
@@ -1308,6 +1450,9 @@ async function boot() {
   } else if (!hasKey) {
     $('#onboard').classList.remove('hidden');
     showStep('key');
+  } else if (!LS.get('avatarChoiceMade', false)) {
+    $('#onboard').classList.remove('hidden');
+    showStep('avatars');
   }
   $('#urlInput').focus();
 }
@@ -1323,6 +1468,7 @@ $$('[data-theme-pick]').forEach((el) => el.addEventListener('click', () => {
   if (el.closest('#onboard')) showStep('key');
 }));
 function showStep(name) {
+  $('#onboard .ob-card').classList.toggle('avatar-step', name === 'avatars');
   $$('#onboard .ob-step').forEach((s) => s.classList.toggle('hidden', s.dataset.step !== name));
   if (name === 'key') setTimeout(() => $('#obKey').focus(), 60);
 }
@@ -1366,9 +1512,9 @@ async function saveKey(input, statusEl, after) {
   }
 }
 $('#obSave').addEventListener('click', () =>
-  saveKey($('#obKey'), $('#obStatus'), () => setTimeout(finishOnboard, 700)));
+  saveKey($('#obKey'), $('#obStatus'), () => setTimeout(() => showStep('avatars'), 700)));
 $('#obKey').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#obSave').click(); });
-$('#obSkip').addEventListener('click', finishOnboard);
+$('#obSkip').addEventListener('click', () => showStep('avatars'));
 function finishOnboard() {
   LS.set('onboarded', true);
   $('#onboard').classList.add('hidden');
@@ -1377,12 +1523,136 @@ function finishOnboard() {
 $('#setSave').addEventListener('click', () => saveKey($('#setKey'), $('#setStatus')));
 $('#setKey').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#setSave').click(); });
 $('#settingsBtn').addEventListener('click', () => {
-  $('#setStatus').textContent = ''; paintStorage();
+  $('#setStatus').textContent = ''; paintStorage(); paintAvatarControls();
   $('#settings').classList.remove('hidden');
 });
 $('#setClose').addEventListener('click', () => $('#settings').classList.add('hidden'));
 $('#settings').addEventListener('mousedown', (e) => {
   if (e.target.id === 'settings') $('#settings').classList.add('hidden');
+});
+
+/* ── avatar preference and cache controls ───────────────── */
+let onboardAvatarMode = false;
+$('#obAvatarChoices').appendChild($('#avatarChoiceTemplate').content.cloneNode(true));
+
+function paintAvatarControls() {
+  const busy = S.fetching || S.avatarBusy;
+  $$('#obAvatarChoices [data-avatar-mode]').forEach(button => {
+    button.setAttribute('aria-pressed', String((button.dataset.avatarMode === 'true') === onboardAvatarMode));
+    button.disabled = busy;
+  });
+  $$('#setAvatarChoices [data-avatar-mode]').forEach(button => {
+    button.setAttribute('aria-pressed', String((button.dataset.avatarMode === 'true') === S.realAvatars));
+    button.disabled = busy;
+  });
+  $('#obAvatarFinish').disabled = busy;
+  $('#wipeAvatarCache').disabled = busy;
+  $('#fetchBtn').disabled = S.avatarBusy;
+  $('#wipeHist').disabled = busy;
+  if (S.fetching) $('#avatarSettingStatus').textContent = 'Avatar settings are available after this download finishes.';
+  else if (!S.avatarBusy && $('#avatarSettingStatus').textContent === 'Avatar settings are available after this download finishes.')
+    $('#avatarSettingStatus').textContent = '';
+}
+
+function resetAvatarProgress() {
+  S.skipAvatars = null;
+  $('#skipAvatarsBtn').classList.add('hidden');
+  $('#setAvatarSkip').classList.add('hidden');
+}
+function skipRemainingAvatars() {
+  if (!S.skipAvatars) return;
+  const skip = S.skipAvatars;
+  resetAvatarProgress();
+  skip();
+}
+$('#skipAvatarsBtn').addEventListener('click', skipRemainingAvatars);
+$('#setAvatarSkip').addEventListener('click', skipRemainingAvatars);
+
+async function clearAvatarCache() {
+  // Drop decoded pixels as well as embedded copies; preserve comments and URLs.
+  preparedAvatars = new WeakMap();
+  S.avatarImages = new Map();
+  if (S.payload) { S.payload.avatars = {}; renderReset(); }
+  await DB.clearAvatars();
+}
+
+async function changeAvatarMode(enabled) {
+  if (S.fetching || S.avatarBusy) return false;
+  S.avatarBusy = true;
+  paintAvatarControls();
+  const note = $('#avatarSettingStatus');
+  let controller = null, queue = null;
+  try {
+    if (!LS.set('realAvatars', enabled)) throw new Error('Could not save your avatar preference. Allow site storage and try again.');
+    S.realAvatars = enabled;
+    paintAvatarControls();
+    if (!enabled) {
+      note.textContent = 'Clearing cached images…';
+      await clearAvatarCache();
+      note.textContent = 'Real avatars are off. Cached images cleared.';
+    } else if (S.payload) {
+      // Enabling for an open video needs only its stored avatar URLs, not a
+      // second comment/API download. Keep initials until preparation finishes.
+      controller = new AbortController();
+      queue = createAvatarQueue(controller.signal, { cached: S.payload.avatars || {} });
+      note.textContent = 'Preparing avatars…';
+      $('#progressWrap').classList.remove('hidden');
+      queue.add(S.payload.comments);
+      await queue.finish(S.payload, onProgress);
+      S.avatarImages = await prepareAvatars(S.payload);
+      renderReset();
+      const stored = await cacheVideo(S.payload);
+      if (stored === 'full') toast('The updated images could not be cached; they remain available in this session.', 'err');
+      else if (stored === 'evicted') toast('An older cached video was dropped to make room.', 'err');
+      note.textContent = `Real avatars enabled. ${S.avatarImages.size.toLocaleString()} images ready.`;
+    } else {
+      note.textContent = 'Real avatars will be downloaded alongside comments.';
+    }
+    return true;
+  } catch (e) {
+    note.textContent = e.message || 'Could not update avatar settings.';
+    toast(note.textContent, 'err');
+    return false;
+  } finally {
+    if (controller) controller.abort();
+    if (queue) await queue.drain();
+    resetAvatarProgress();
+    $('#progressWrap').classList.add('hidden');
+    S.avatarBusy = false;
+    paintAvatarControls();
+    paintStorage();
+  }
+}
+
+$$('#obAvatarChoices [data-avatar-mode]').forEach(button => button.addEventListener('click', () => {
+  onboardAvatarMode = button.dataset.avatarMode === 'true';
+  paintAvatarControls();
+}));
+$$('#setAvatarChoices [data-avatar-mode]').forEach(button => button.addEventListener('click', async () => {
+  const enabled = button.dataset.avatarMode === 'true';
+  if (enabled !== S.realAvatars) await changeAvatarMode(enabled);
+}));
+$('#obAvatarFinish').addEventListener('click', async () => {
+  if (!await changeAvatarMode(onboardAvatarMode)) return;
+  if (!LS.set('avatarChoiceMade', true)) { toast('Could not save setup. Allow site storage and try again.', 'err'); return; }
+  finishOnboard();
+});
+$('#wipeAvatarCache').addEventListener('click', async () => {
+  if (S.fetching || S.avatarBusy) return;
+  S.avatarBusy = true;
+  paintAvatarControls();
+  $('#avatarSettingStatus').textContent = 'Clearing cached images…';
+  try {
+    await clearAvatarCache();
+    $('#avatarSettingStatus').textContent = 'Cached images cleared. Comments are still saved. New images will download on your next fetch.';
+  } catch (e) {
+    $('#avatarSettingStatus').textContent = e.message || 'Could not clear cached images.';
+    toast($('#avatarSettingStatus').textContent, 'err');
+  } finally {
+    S.avatarBusy = false;
+    paintAvatarControls();
+    paintStorage();
+  }
 });
 
 /* ── meters ────────────────────────────────────────────── */
@@ -1423,13 +1693,15 @@ $('#cancelBtn').addEventListener('click', () => {
 });
 
 async function startFetch() {
-  if (S.fetching) return;
+  if (S.fetching || S.avatarBusy) return;
   if (!LS.get('apiKey', '')) { toast('Add an API key in settings first.', 'err'); return; }
   let vid;
   try { vid = videoId($('#urlInput').value); }
   catch (e) { toast(e.message, 'err'); return; }
 
   S.fetching = true;
+  resetAvatarProgress();
+  paintAvatarControls();
   S.abort = new AbortController();
   $('#fetchBtn').classList.add('hidden');
   $('#cancelBtn').classList.remove('hidden');
@@ -1441,7 +1713,7 @@ async function startFetch() {
 
   try {
     const payload = await fetchAll(vid, S.abort.signal, onProgress);
-    loadPayload(payload);
+    await loadPayload(payload);
     const stored = await cacheVideo(payload);
     S.history = [{ videoId: payload.videoId, title: payload.title,
                    channelTitle: payload.channelTitle, thumbnail: payload.thumbnail,
@@ -1461,6 +1733,8 @@ async function startFetch() {
     else toast(e.message || 'Fetch failed.', 'err');
   } finally {
     S.fetching = false; S.abort = null;
+    resetAvatarProgress();
+    paintAvatarControls();
     $('#fetchBtn').classList.remove('hidden');
     $('#cancelBtn').classList.add('hidden');
     $('#urlInput').disabled = false;
@@ -1507,7 +1781,19 @@ function onProgress(p) {
     return;
   }
 
+  if (p.phase === 'avatars') {
+    S.skipAvatars = p.skip || null;
+    $('#skipAvatarsBtn').classList.toggle('hidden', !S.skipAvatars);
+    $('#setAvatarSkip').classList.toggle('hidden', !S.skipAvatars);
+    if (S.avatarBusy) $('#avatarSettingStatus').textContent = 'Preparing avatars…';
+    fill.classList.remove('indet');
+    fill.style.width = '100%';
+    txt.textContent = `Preparing avatars · ${p.loaded.toLocaleString()} of ${p.total.toLocaleString()}`;
+    return;
+  }
+
   if (p.phase === 'done') {
+    resetAvatarProgress();
     $('#progressWrap').classList.add('hidden');
     fill.classList.remove('indet');
     fill.style.width = '100%';
@@ -1614,7 +1900,10 @@ function linkReplies(top, replies) {
   return out.length === replies.length ? out : replies;   // never drop a comment
 }
 
-function loadPayload(payload) {
+async function loadPayload(payload) {
+  if (!S.realAvatars) payload.avatars = {};
+  const avatars = S.realAvatars ? await prepareAvatars(payload) : new Map();
+  S.avatarImages = avatars;
   // Also repairs previously cached downloads before filtering or rendering.
   payload = normalizePayload(payload);
   S.payload = payload;
@@ -2224,6 +2513,15 @@ function renderComment(c, isReply) {
   av.className = 'av' + (c.channelId ? ' av-link' : '');
   av.style.background = avatarColor(c.channelId || c.author || c.id);
   av.textContent = initial(c.author);
+  const snapshot = S.realAvatars && S.avatarImages && S.avatarImages.get(c.avatarUrl);
+  if (snapshot) {
+    // Drawing prepared pixels is synchronous: no late image decode or swap.
+    const canvas = document.createElement('canvas');
+    canvas.width = snapshot.width; canvas.height = snapshot.height;
+    canvas.getContext('2d').drawImage(snapshot, 0, 0);
+    canvas.setAttribute('aria-hidden', 'true');
+    av.replaceChildren(canvas);
+  }
   if (c.channelId) {
     av.href = 'https://www.youtube.com/channel/' + c.channelId;
     av.target = '_blank'; av.rel = 'noopener';
@@ -2342,6 +2640,166 @@ const THUMB = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true
   '7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>';
 
 /* ── avatars & formatting ──────────────────────────────── */
+
+// One embedded PNG per unique URL; decoded snapshots are transient, cache data
+// stays serializable. A cached download never needs the network to show avatars.
+let preparedAvatars = new WeakMap();
+const embeddedAvatar = (src) => typeof src === 'string' && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(src);
+
+function avatarSnapshot(src, signal) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    let timer;
+    const finish = (error, canvas) => {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', abort);
+      img.onload = img.onerror = null;
+      if (error) { img.src = ''; reject(error); }
+      else resolve(canvas);
+    };
+    const abort = () => finish(new DOMException('aborted', 'AbortError'));
+    if (signal && signal.aborted) { abort(); return; }
+    if (signal) signal.addEventListener('abort', abort, { once: true });
+    timer = setTimeout(() => finish(new Error('Avatar timed out')), 8000);
+    img.onload = () => {
+      try {
+        if (!img.naturalWidth || !img.naturalHeight) throw new Error('Empty avatar');
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 68;
+        const ctx = canvas.getContext('2d');
+        const size = Math.min(img.naturalWidth, img.naturalHeight);
+        ctx.drawImage(img, (img.naturalWidth - size) / 2, (img.naturalHeight - size) / 2,
+          size, size, 0, 0, 68, 68);
+        // Verify the pixels can be embedded before accepting the real avatar.
+        canvas.toDataURL('image/png');
+        finish(null, canvas);
+      } catch (e) { finish(e); }
+    };
+    img.onerror = () => finish(new Error('Avatar unavailable'));
+    if (!embeddedAvatar(src)) {
+      img.crossOrigin = 'anonymous';
+      img.referrerPolicy = 'no-referrer';
+    }
+    img.src = src;
+  });
+}
+
+// Feed this bounded queue as comment pages arrive. Avatar requests overlap
+// pagination and reply expansion, while the UI keeps showing comment progress.
+function createAvatarQueue(signal, { enabled = true, cached = {} } = {}) {
+  const downloads = new AbortController();
+  const abortDownloads = () => downloads.abort();
+  if (signal.aborted) abortDownloads();
+  else signal.addEventListener('abort', abortDownloads, { once: true });
+  let skipped = false;
+  const skip = () => { skipped = true; downloads.abort(); };
+  const seen = new Set(), pending = [], active = new Set();
+  const embedded = new Map(), snapshots = new Map();
+  let next = 0, completed = 0, report = null;
+  const progress = () => {
+    if (report && !signal.aborted && !skipped)
+      report({ phase: 'avatars', loaded: completed, total: pending.length, skip });
+  };
+  function pump() {
+    while (!downloads.signal.aborted && active.size < 12 && next < pending.length) {
+      const url = pending[next++];
+      const task = (async () => {
+        try {
+          let snapshot;
+          if (embeddedAvatar(cached[url])) {
+            try { snapshot = await avatarSnapshot(cached[url], downloads.signal); } catch {}
+          }
+          if (!snapshot && !downloads.signal.aborted) snapshot = await avatarSnapshot(url, downloads.signal);
+          if (snapshot && !downloads.signal.aborted) {
+            embedded.set(url, snapshot.toDataURL('image/png'));
+            snapshots.set(url, snapshot);
+          }
+        } catch {
+          // Image failures retain initials. Cancellation is checked by finish;
+          // background tasks settle without producing unhandled rejections.
+        }
+      })().finally(() => {
+        active.delete(task);
+        completed++;
+        pump();
+        progress();
+      });
+      active.add(task);
+    }
+  }
+  async function drain() {
+    while (active.size) await Promise.all([...active]);
+    signal.removeEventListener('abort', abortDownloads);
+  }
+  return {
+    skip,
+    add(comments) {
+      if (!enabled || downloads.signal.aborted) return;
+      for (const c of comments) {
+        const url = c.avatarUrl;
+        if (!url || !/^https:\/\//i.test(url) || seen.has(url)) continue;
+        seen.add(url);
+        pending.push(url);
+      }
+      pump();
+    },
+    drain,
+    async finish(payload, onProgress) {
+      // Only show an avatar stage if some images are still outstanding.
+      report = onProgress;
+      if (active.size) progress();
+      await drain();
+      if (signal.aborted) throw new DOMException('aborted', 'AbortError');
+      const kept = new Map();
+      payload.avatars = Object.create(null);
+      for (const c of payload.comments) {
+        if (!snapshots.has(c.avatarUrl)) continue;
+        payload.avatars[c.avatarUrl] = embedded.get(c.avatarUrl);
+        kept.set(c.avatarUrl, snapshots.get(c.avatarUrl));
+      }
+      preparedAvatars.set(payload, kept);
+    },
+  };
+}
+
+async function prepareAvatars(payload, allowNetwork = false, signal, onProgress) {
+  if (signal && signal.aborted) throw new DOMException('aborted', 'AbortError');
+  if (preparedAvatars.has(payload)) return preparedAvatars.get(payload);
+  const stored = payload.avatars || {};
+  const embedded = Object.create(null), snapshots = new Map();
+  const urls = [...new Set(payload.comments.map((c) => c.avatarUrl).filter(Boolean))];
+  let loaded = 0;
+  const progress = () => onProgress && onProgress({ phase: 'avatars', loaded, total: urls.length });
+  progress();
+  await runPool(urls, 12, async (url) => {
+    if (signal && signal.aborted) throw new DOMException('aborted', 'AbortError');
+    const cached = embeddedAvatar(stored[url]) ? stored[url] : '';
+    try {
+      let snapshot;
+      if (cached) {
+        try { snapshot = await avatarSnapshot(cached, signal); }
+        catch (e) { if (e.name === 'AbortError') throw e; }
+      }
+      if (!snapshot && allowNetwork && /^https:\/\//i.test(url)) {
+        snapshot = await avatarSnapshot(url, signal);
+      }
+      if (snapshot) {
+        embedded[url] = snapshot.toDataURL('image/png');
+        snapshots.set(url, snapshot);
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      // Missing, blocked, malformed and timed-out images keep the original initials.
+    }
+    loaded++;
+    progress();
+  });
+  if (signal && signal.aborted) throw new DOMException('aborted', 'AbortError');
+  payload.avatars = embedded;
+  preparedAvatars.set(payload, snapshots);
+  return snapshots;
+}
+
 function hash(s) {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -2444,7 +2902,10 @@ function paintHistory() {
 }
 
 async function openHistory(h) {
-  if (S.fetching) { toast('Finish or cancel the current download before opening another video.'); return; }
+  if (S.fetching || S.avatarBusy) { toast('Finish or cancel the current download before opening another video.'); return; }
+  S.fetching = true;
+  paintAvatarControls();
+  try {
   const d = await DB.get(h.videoId);
   if (!d) {
     confirmBox('Re-fetch this video?',
@@ -2453,10 +2914,14 @@ async function openHistory(h) {
       { label: 'Re-fetch', danger: false });
     return;
   }
-  loadPayload(unpack(d));
+  status('Preparing cached avatars…');
+  await loadPayload(unpack(d));
   setUrl('https://www.youtube.com/watch?v=' + h.videoId);
   paintHistory();
   status('Loaded from cache');
+  } catch (e) {
+    toast(e.message || 'Could not open this cached video.', 'err');
+  } finally { S.fetching = false; paintAvatarControls(); }
 }
 
 $('#wipeHist').addEventListener('click', () => confirmBox('Wipe the entire history?',
@@ -2619,6 +3084,7 @@ $('#exportMenu').addEventListener('click', async (e) => {
   if (!b) return;
   $('#exportMenu').classList.add('hidden');
   if (!S.payload) return;
+  if (S.avatarBusy) { toast('Wait for the avatar update, or click Skip.'); return; }
   if (!S.view.length) { toast('Nothing to export — the current view is empty.', 'err'); return; }
   const fmt = b.dataset.fmt;
   if (fmt === 'pdf') return exportPdf();
@@ -2641,12 +3107,18 @@ function buildJSON() {
   for (const t of S.view) { flat.push(t.comment); flat.push(...t.replies); }
   const m = { ...S.payload };
   delete m.comments;
+  if (!S.realAvatars) delete m.avatars;
+  const exportedComments = flat.map(c => {
+    const copy = { ...c };
+    if (!S.realAvatars) delete copy.avatarUrl;
+    return copy;
+  });
   return JSON.stringify({
     exportedAt: new Date().toISOString(),
     video: m, view: viewMeta(),
     counts: { threads: S.view.length, topLevel: S.view.length,
               replies: S.view.reduce((n, t) => n + t.replies.length, 0), total: flat.length },
-    comments: flat,
+    comments: exportedComments,
   }, null, 2);
 }
 
@@ -2687,8 +3159,9 @@ function buildHTML() {
     const name = c.channelId
       ? `<a class="au" href="https://www.youtube.com/channel/${esc(c.channelId)}">${esc(c.author)}</a>`
       : `<span class="au">${esc(c.author)}</span>`;
+    const avatar = S.realAvatars && p.avatars && p.avatars[c.avatarUrl];
     const av = `<div class="av" style="background:${esc(avatarColor(c.channelId || c.author || c.id))}"` +
-      `>${esc(initial(c.author))}</div>`;
+      `>${esc(initial(c.author))}${embeddedAvatar(avatar) ? `<img src="${esc(avatar)}" alt="" width="68" height="68">` : ''}</div>`;
     return `<div class="c${isRep ? ' r' : ''}">${av}<div class="cb"><div class="h">${name} ` +
       `<a class="ts" href="${perma}">${fmtUTC(c.publishedAt)}</a>` +
       `${c.likeCount ? ` <span class="lk">${THUMB} ${c.likeCount.toLocaleString()}</span>` : ''}</div>` +
@@ -2741,19 +3214,26 @@ h1{font-size:20px;line-height:1.3;margin:0 0 4px;font-weight:650}
 .av{flex:0 0 auto;width:32px;height:32px;border-radius:50%;display:flex;
  align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#fff;
  -webkit-print-color-adjust:exact;print-color-adjust:exact}
+.av{position:relative}
+.av img{position:absolute;inset:0;display:block;width:100%;height:100%;border-radius:50%;object-fit:cover}
+html.avatars-pending .doc{visibility:hidden}
 .c.r .av{width:25px;height:25px;font-size:11px}
 .lk svg{width:12px;height:12px;vertical-align:-2px}
 .h{font-size:12.5px;color:${mu};margin-bottom:3px}
 .au{font-weight:600;color:${fg};text-decoration:none}
 .ts,.lk{color:${mu};text-decoration:none}
 .t{white-space:pre-wrap;overflow-wrap:anywhere}
-a{color:${ac}}</style></head><body><div class="doc">
+a{color:${ac}}</style><script>document.documentElement.classList.add('avatars-pending');<\/script></head><body><div class="doc">
 <h1>${esc(p.title)}</h1><div class="meta">${esc(p.channelTitle)} ·
 <a href="https://www.youtube.com/watch?v=${esc(p.videoId)}">youtube.com/watch?v=${esc(p.videoId)}</a><br>
 ${total.toLocaleString()} comments shown · sorted by ${v.sort}<br>Filter: ${filt.length ? filt.join('; ') : 'no filter — all comments'}<br>
 Fetched ${fmtUTC(p.fetchedAt)} · exported ${fmtUTC(new Date().toISOString())}</div>
 ${body}</div>
 <script>
+// Reveal the standalone document only once its embedded images are decoded.
+Promise.all(Array.from(document.images, function (img) {
+  return img.decode().catch(function () { img.remove(); });
+})).then(function () { document.documentElement.classList.remove('avatars-pending'); });
 document.addEventListener('click', function (e) {
   var hit = e.target.closest('.rail, .rc');
   if (!hit) return;
@@ -2814,14 +3294,16 @@ function exportPdf() {
         sorted by ${v.sort}<br>
         ${filt.length ? 'Filter: ' + filt.join('; ') : 'No filter — all comments'}</div>`;
 
-      setTimeout(() => {
+      // Avatars are already painted canvases. Wait for fonts and layout too.
+      Promise.resolve(document.fonts && document.fonts.ready).then(() => new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)))).then(() => {
         status('');
         // Browsers differ in whether print() blocks; afterprint owns cleanup.
         window.addEventListener('afterprint', () => {
           $('#printHead').innerHTML = ''; renderReset();
         }, { once: true });
         window.print();
-      }, 350);
+      });
     }, 40);
   };
   if (n > 1500) {
