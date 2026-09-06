@@ -845,7 +845,7 @@ a:hover { text-decoration: underline; }
       </span>
       <div class="url-field">
         <input id="urlInput" type="text" spellcheck="false" autocomplete="off"
-               placeholder="Paste a YouTube video link">
+               placeholder="Enter video URL">
         <button class="url-clear hidden" id="urlClear" data-tip="Clear" aria-label="Clear URL">
           <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor"
             d="M9 3h6l1 1h4v2H4V4h4l1-1zM6 7h12l-1 13a1 1 0 0 1-1 .95H8A1 1 0 0 1 7 20L6 7zm3.2 2.4.5 9h1.6l-.4-9H9.2zm4 0-.4 9h1.6l.5-9h-1.7z"/></svg>
@@ -2521,10 +2521,18 @@ function revealAnchor(wrap) {
   if (!pane) return;
   const sticky = $('#stickyTop');
   const view = pane.getBoundingClientRect();
-  const limit = view.top + (sticky ? sticky.offsetHeight : 0);
+  const limit = sticky ? Math.max(view.top, sticky.getBoundingClientRect().bottom) : view.top;
   const r = anchor.getBoundingClientRect();
   if (r.top >= limit && r.bottom <= view.bottom) return;
-  pane.scrollBy({ top: r.top - limit - 8, behavior: 'smooth' });
+  // Reveal the whole root card, including the gap above its rounded border.
+  const card = anchor.parentElement.classList.contains('thread') ? anchor.parentElement : null;
+  const top = card ? card.getBoundingClientRect().top : r.top;
+  const gap = card ? parseFloat(getComputedStyle(card.parentElement).rowGap) || 9 : 8;
+  // Keep fractional toolbar heights at browser zoom, then round toward the card
+  // so a partial pixel of the preceding thread cannot peek below the toolbar.
+  const scale = window.devicePixelRatio || 1;
+  const scrollTop = Math.ceil((pane.scrollTop + top - limit - gap) * scale) / scale;
+  pane.scrollTo({ top: scrollTop, behavior: 'smooth' });
 }
 
 /* One wrap per sibling group, at every depth. The rail stretches the full
