@@ -520,18 +520,27 @@ a:hover { text-decoration: underline; }
 .rail:hover::before { background: var(--accent); width: 3px; }
 .rep-box { flex: 1; min-width: 0; padding-left: 12px; }
 .rep-box .cm.reply { margin-left: 0; }
+/* Sub-threads reuse the wrap/rail structure, so every nesting level gets one
+   continuous rail of its own and its own collapse toggle. Nested geometry is
+   tighter than the top level so a five-deep chain still leaves room for text. */
+.rep-box .rep-wrap { margin-left: 9px; }
+.rep-box .rep-wrap > .rail { width: 10px; }
+.rep-box .rep-wrap > .rep-box { padding-left: 7px; }
 .rep-box .rep-toggle { margin-left: 0; }
 .rep-collapsed {
   display: none; border: 0; background: none; color: var(--accent); cursor: pointer;
   font: inherit; font-size: 12.5px; font-weight: 600; padding: 2px 10px; text-align: left;
 }
 .rep-collapsed:hover { text-decoration: underline; }
-.rep-wrap.collapsed .rep-box { display: none; }
-.rep-wrap.collapsed .rep-collapsed { display: block; align-self: center; }
-.rep-wrap.collapsed .rail { padding-bottom: 0; }
-.rep-wrap.collapsed .rail::before { background: var(--faint); }
-@media print { .rail { display: none; } .rep-box { padding-left: 12px; }
-  .rep-collapsed { display: none !important; } .rep-wrap { margin-left: 24px; } }
+/* Child combinators only — an outer collapse must not reach into nested wraps. */
+.rep-wrap.collapsed { margin-bottom: 12px; }
+.rep-wrap.collapsed > .rep-box { display: none; }
+.rep-wrap.collapsed > .rep-collapsed { display: block; align-self: center; }
+.rep-wrap.collapsed > .rail { padding-bottom: 4px; }
+.rep-wrap.collapsed > .rail::before { background: var(--faint); }
+@media print { .rail { display: none; } .rep-collapsed { display: none !important; }
+  .rep-wrap { margin-left: 24px; } .rep-box .rep-wrap { margin-left: 0; }
+  .rep-box { padding-left: 12px; border-left: 2px solid var(--rule); } }
 
 /* ══ URL field with inline clear button ══ */
 .url-field { flex: 1; min-width: 0; position: relative; display: flex; align-items: center; }
@@ -1523,6 +1532,88 @@ function normalizePayload(payload) {
            replyCount: comments.length - topLevelCount, fetchedCount: comments.length };
 }
 
+/* ── reply nesting ─────────────────────────────────────────
+   The Data API flattens a thread: every reply carries snippet.parentId equal
+   to the top-level comment id, and nothing in the payload says which reply it
+   was actually answering. (Checked on a 289-reply thread — one distinct
+   parentId, one distinct id prefix.) YouTube's own front end gets that edge
+   from InnerTube; the public API never exposes it.
+
+   What survives is the "@handle" YouTube auto-prefixes onto a reply-to-reply.
+   Matching that prefix against the handles in the thread rebuilds most of the
+   tree. It is a reconstruction, not data, and the UI says so. */
+const LEAD_JUNK = /^[\s\u200b-\u200f\u2060\ufeff]+/;
+const hkey = (s) => (s || '').normalize('NFC').toLowerCase();
+
+function linkReplies(top, replies) {
+  top.depth = 0;
+  top.replyTo = null;
+  if (!replies.length) return replies;
+
+  // Longest handle first: "@karthikeyabrmthe water in humans" must resolve to
+  // @karthikeyabrm, not to a shorter handle that prefixes it.
+  const handles = [...new Set([top, ...replies].map((c) => hkey(c.author)))]
+    .filter((h) => h.startsWith('@')).sort((a, b) => b.length - a.length);
+  const topKey = hkey(top.author);
+  const prior = new Map();      // handle -> that author's comments so far, oldest first
+  const addressed = new Map();  // comment id -> handle it addressed
+  const kids = new Map();
+
+  for (const r of replies) {                       // arrives oldest-first
+    const t = hkey((r.text || '').replace(LEAD_JUNK, ''));
+    const me = hkey(r.author);
+    let parent = top, handle = null;
+
+    if (t.charCodeAt(0) === 64) {                  // '@'
+      handle = handles.find((h) => t.startsWith(h)) || null;
+      if (handle === me) handle = null;            // self-mention addresses nobody
+      else if (handle && handle !== topKey) {
+        // A mention of the thread starter is left on the root: YouTube only
+        // auto-inserts the handle for reply-to-reply, but in practice these
+        // are overwhelmingly reactions to the original comment, and pinning
+        // them to whichever reply they posted last is measurably wrong.
+        const cands = prior.get(handle) || [];
+        if (cands.length) {
+          // Prefer their newest comment that addressed *this* author — a real
+          // back-and-forth — before falling back to their newest overall.
+          let pick = null;
+          for (let i = cands.length - 1; i >= 0; i--) {
+            if (addressed.get(cands[i].id) === me) { pick = cands[i]; break; }
+          }
+          // No dialogue yet, so this is a first entry into their branch. Prefer
+          // their newest comment that addresses nobody — a direct reply to the
+          // thread, visible to everyone — over one buried in a third party's
+          // exchange that this author has never taken part in.
+          if (!pick) {
+            for (let i = cands.length - 1; i >= 0; i--) {
+              if (!addressed.has(cands[i].id)) { pick = cands[i]; break; }
+            }
+          }
+          parent = pick || cands[cands.length - 1];
+        }
+      }
+    }
+
+    if (handle) addressed.set(r.id, handle);
+    r.replyTo = parent.id;
+    r.depth = parent.depth + 1;
+    if (!kids.has(parent.id)) kids.set(parent.id, []);
+    kids.get(parent.id).push(r);
+    if (!prior.has(me)) prior.set(me, []);
+    prior.get(me).push(r);
+  }
+
+  // Depth-first, iteratively, so a reply renders directly under what it answers.
+  const out = [], stack = [...(kids.get(top.id) || [])].reverse();
+  while (stack.length) {
+    const c = stack.pop();
+    out.push(c);
+    const branch = kids.get(c.id) || [];
+    for (let i = branch.length - 1; i >= 0; i--) stack.push(branch[i]);
+  }
+  return out.length === replies.length ? out : replies;   // never drop a comment
+}
+
 function loadPayload(payload) {
   // Also repairs previously cached downloads before filtering or rendering.
   payload = normalizePayload(payload);
@@ -1535,7 +1626,8 @@ function loadPayload(payload) {
     } else tops.push(c);
   }
   for (const arr of byParent.values()) arr.sort(cmpDate);   // replies always oldest-first
-  S.threads = tops.map((c) => ({ comment: c, replies: byParent.get(c.id) || [] }));
+  S.threads = tops.map((c) => ({ comment: c,
+                                 replies: linkReplies(c, byParent.get(c.id) || []) }));
 
   $('#empty').classList.add('hidden');
   $('#toolbar').classList.remove('disabled');
@@ -1924,15 +2016,21 @@ function gotoMatch(i, smooth) {
 
   while (S.rendered <= m.ti && S.rendered < S.view.length) renderMore();
 
-  const host = $('#list').querySelector(`[data-cid="${cssEscape(m.cid)}"]`);
+  let host = $('#list').querySelector(`[data-cid="${cssEscape(m.cid)}"]`);
   if (!host) { paintFindBar(); return; }
 
-  // A user-collapsed thread must open so the hit is actually visible.
-  const wrap = host.closest('.thread');
-  const rw = wrap && wrap.querySelector('.rep-wrap');
-  if (rw && rw.classList.contains('collapsed')) setCollapsed(rw, false);
-  const more = wrap && wrap.querySelector('.rep-toggle');
-  if (more && host.closest('.rep-box') && !host.offsetParent) more.click();
+  // Sub-threads collapse on their own, so open every wrap above the hit.
+  for (let rw = host.closest('.rep-wrap'); rw; rw = rw.parentElement.closest('.rep-wrap')) {
+    if (rw.classList.contains('collapsed')) setCollapsed(rw, false);
+  }
+  // Revealing the trimmed tail rebuilds the wrap, which detaches the old node.
+  const thread = host.closest('.thread');
+  const more = thread && thread.querySelector('.rep-toggle');
+  if (more && host.closest('.rep-box') && !host.offsetParent) {
+    more.click();
+    host = $('#list').querySelector(`[data-cid="${cssEscape(m.cid)}"]`);
+    if (!host) { paintFindBar(); return; }
+  }
 
   const marks = m.k === null ? [] : host.querySelectorAll(`mark[data-match="${m.k}"]`);
   const target = marks[0] || host.querySelector('.cm-author') || host;
@@ -2006,13 +2104,84 @@ new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) renderM
 
 function setCollapsed(rw, on) {
   rw.classList.toggle('collapsed', on);
-  const rail = rw.querySelector('.rail');
+  const rail = rw.querySelector(':scope > .rail');
   const n = +rw.dataset.replyCount || 0;
   if (rail) rail.dataset.tip = on
     ? `Show ${n} ${n === 1 ? 'reply' : 'replies'}`
     : 'Hide replies';
-  const label = rw.querySelector('.rep-collapsed');
+  const label = rw.querySelector(':scope > .rep-collapsed');
   if (label) label.textContent = `${n} ${n === 1 ? 'reply' : 'replies'} hidden — click to show`;
+}
+
+/* Rebuild the display tree from the flat DFS list. A prefix of that list is
+   always a complete forest — a reply never precedes its own parent — so the
+   CAP slice below can be turned into a tree without orphaning anything. */
+function replyForest(list) {
+  const nodes = new Map(), roots = [];
+  for (const c of list) nodes.set(c.id, { c, kids: [] });
+  for (const c of list) {
+    const parent = nodes.get(c.replyTo);
+    (parent ? parent.kids : roots).push(nodes.get(c.id));
+  }
+  return roots;
+}
+
+function countNodes(nodes) {
+  let n = 0;
+  for (const x of nodes) n += 1 + countNodes(x.kids);
+  return n;
+}
+
+/* Collapsing a thread from far down the page otherwise leaves the user staring
+   at a rail with no visible header. Jump back to the comment the rail hangs
+   off — but only when it has actually scrolled out of view. */
+function revealAnchor(wrap) {
+  const anchor = wrap.previousElementSibling;
+  if (!anchor || !anchor.classList.contains('cm')) return;
+  const pane = anchor.closest('#main');                 // the page itself never scrolls
+  if (!pane) return;
+  const sticky = $('#stickyTop');
+  const view = pane.getBoundingClientRect();
+  const limit = view.top + (sticky ? sticky.offsetHeight : 0);
+  const r = anchor.getBoundingClientRect();
+  if (r.top >= limit && r.bottom <= view.bottom) return;
+  pane.scrollBy({ top: r.top - limit - 8, behavior: 'smooth' });
+}
+
+/* One wrap per sibling group, at every depth. The rail stretches the full
+   height of its own group, so a level reads as a single unbroken line, and
+   each group collapses on its own. */
+function makeReplyWrap(nodes, total) {
+  const wrap = document.createElement('div');
+  wrap.className = 'rep-wrap';
+  wrap.dataset.replyCount = total == null ? countNodes(nodes) : total;
+
+  const rail = document.createElement('button');
+  rail.className = 'rail';
+  rail.setAttribute('aria-label', 'Collapse replies');
+  wrap.appendChild(rail);
+
+  const box = document.createElement('div');
+  box.className = 'rep-box';
+  for (const n of nodes) {
+    box.appendChild(renderComment(n.c, true));
+    if (n.kids.length) box.appendChild(makeReplyWrap(n.kids));
+  }
+  wrap.appendChild(box);
+
+  const label = document.createElement('button');
+  label.className = 'rep-collapsed';
+  wrap.appendChild(label);
+
+  const toggle = () => {
+    const on = !wrap.classList.contains('collapsed');
+    setCollapsed(wrap, on);
+    if (on) revealAnchor(wrap);
+  };
+  rail.addEventListener('click', toggle);
+  label.addEventListener('click', toggle);
+  setCollapsed(wrap, false);
+  return wrap;
 }
 
 function renderThread(t, forcePrint) {
@@ -2022,22 +2191,9 @@ function renderThread(t, forcePrint) {
   const reps = t.replies;
   if (!reps.length) return el;
 
-  const wrap = document.createElement('div');
-  wrap.className = 'rep-wrap';
-  wrap.dataset.replyCount = reps.length;
-
-  const rail = document.createElement('button');
-  rail.className = 'rail';
-  rail.setAttribute('aria-label', 'Collapse replies');
-  rail.dataset.tip = 'Hide replies';
-  wrap.appendChild(rail);
-
-  const box = document.createElement('div');
-  box.className = 'rep-box';
-
   const CAP = 10;
   const trim = !forcePrint && !S.activeFilter && reps.length > CAP;
-  (trim ? reps.slice(0, CAP) : reps).forEach((r) => box.appendChild(renderComment(r, true)));
+  let wrap = makeReplyWrap(replyForest(trim ? reps.slice(0, CAP) : reps), reps.length);
 
   if (trim) {
     const n = reps.length - CAP;
@@ -2045,21 +2201,13 @@ function renderThread(t, forcePrint) {
     btn.className = 'rep-toggle';
     btn.textContent = `Show ${n} more ${n === 1 ? 'reply' : 'replies'}`;
     btn.addEventListener('click', () => {
-      reps.slice(CAP).forEach((r) => box.appendChild(renderComment(r, true)));
-      btn.remove();
+      // The extra replies can land anywhere in the tree, so rebuild the wrap.
+      const full = makeReplyWrap(replyForest(reps), reps.length);
+      wrap.replaceWith(full);
+      wrap = full;
     }, { once: true });
-    box.appendChild(btn);
+    wrap.querySelector(':scope > .rep-box').appendChild(btn);
   }
-  wrap.appendChild(box);
-
-  const label = document.createElement('button');
-  label.className = 'rep-collapsed';
-  label.textContent = `${reps.length} ${reps.length === 1 ? 'reply' : 'replies'} hidden — click to show`;
-  wrap.appendChild(label);
-
-  const toggle = () => setCollapsed(wrap, !wrap.classList.contains('collapsed'));
-  rail.addEventListener('click', toggle);
-  label.addEventListener('click', toggle);
 
   el.appendChild(wrap);
   return el;
@@ -2069,6 +2217,7 @@ function renderComment(c, isReply) {
   const el = document.createElement('div');
   el.className = 'cm' + (isReply ? ' reply' : '');
   el.dataset.cid = c.id;
+  if (isReply && c.depth > 1) el.dataset.depth = c.depth;
   const isOP = c.channelId && S.payload && c.channelId === S.payload.channelId;
 
   const av = document.createElement(c.channelId ? 'a' : 'div');
@@ -2545,15 +2694,21 @@ function buildHTML() {
       `${c.likeCount ? ` <span class="lk">${THUMB} ${c.likeCount.toLocaleString()}</span>` : ''}</div>` +
       `<div class="t">${richHTML(c.text)}</div></div></div>`;
   };
+  // Same nested wrap/rail structure as the live view, so the saved file gets
+  // one continuous rail per level and per-sub-thread collapsing too.
+  const wrapHTML = (nodes, total) => {
+    const n = total == null ? countNodes(nodes) : total;
+    return `<div class="rw" data-n="${n}">` +
+      `<button class="rail" aria-label="Collapse replies"></button>` +
+      `<div class="rb">${nodes.map((x) =>
+        block(x.c, true) + (x.kids.length ? wrapHTML(x.kids) : '')).join('')}</div>` +
+      `<button class="rc">${n} ${n === 1 ? 'reply' : 'replies'} hidden — click to show</button>` +
+      `</div>`;
+  };
   const body = S.view.map((t) => {
     if (!t.replies.length) return `<div class="th">${block(t.comment, false)}</div>`;
-    const n = t.replies.length;
     return `<div class="th">${block(t.comment, false)}` +
-      `<div class="rw" data-n="${n}">` +
-      `<button class="rail" aria-label="Collapse replies"></button>` +
-      `<div class="rb">${t.replies.map((r) => block(r, true)).join('')}</div>` +
-      `<button class="rc">${n} ${n === 1 ? 'reply' : 'replies'} hidden — click to show</button>` +
-      `</div></div>`;
+      wrapHTML(replyForest(t.replies), t.replies.length) + `</div>`;
   }).join('');
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
@@ -2575,8 +2730,12 @@ h1{font-size:20px;line-height:1.3;margin:0 0 4px;font-weight:650}
 .rb{flex:1;min-width:0;padding-left:11px}
 .rc{display:none;border:0;background:none;color:${ac};cursor:pointer;font:inherit;
  font-size:12.5px;padding:2px 8px}
-.rw.collapsed .rb{display:none}
-.rw.collapsed .rc{display:block}
+.rb .rw{margin-left:9px}
+.rb .rw>.rail{width:10px}
+.rb .rw>.rb{padding-left:7px}
+.rw.collapsed{margin-bottom:11px}
+.rw.collapsed>.rb{display:none}
+.rw.collapsed>.rc{display:block}
 @media print{.rail{display:none}.rb{padding-left:12px;border-left:2px solid ${ln}}.rc{display:none!important}}
 .cb{min-width:0;flex:1}
 .av{flex:0 0 auto;width:32px;height:32px;border-radius:50%;display:flex;
