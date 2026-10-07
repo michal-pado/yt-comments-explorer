@@ -191,6 +191,11 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--rule);
 }
 #toolbar.disabled { pointer-events: none; }
+/* Reset and Export sit on the darker strip: give them the input-field fill so the
+   strip's controls all match. The ID selector outranks the generic hover rule,
+   so hover is restated here. */
+#toolbar .btn.ghost { background: var(--bg); }
+#toolbar .btn.ghost:hover:not(:disabled) { background: var(--panel); }
 #toolbar.disabled > * { opacity: .42; }
 .tb-group { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .tb-group.grow { flex: 1 1 200px; flex-wrap: wrap; gap: 8px 12px; }
