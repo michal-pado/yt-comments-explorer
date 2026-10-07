@@ -356,6 +356,10 @@ a:hover { text-decoration: underline; }
   display: flex; gap: 12px; align-items: center; font-variant-numeric: tabular-nums; }
 .cm-likes { display: inline; white-space: nowrap; }
 .cm-likes svg { width: 13px; height: 13px; vertical-align: -2px; margin-right: 4px; }
+.cm-tr { display: block; margin-top: 5px; padding: 0; border: 0; background: none;
+  color: var(--muted); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.cm-tr:hover:not(:disabled) { color: var(--accent); text-decoration: underline; }
+.cm-tr:disabled { cursor: progress; opacity: .7; }
 
 #listEnd { text-align: center; color: var(--faint); font-size: 12.5px; padding: 24px 0 36px; }
 #sentinel { height: 1px; }
@@ -691,6 +695,9 @@ a:hover { text-decoration: underline; }
     padding: 11px 0 3px; }
   .cm-text, .cm-author, .cm-head { color: #000 !important; }
   .cm-age, .cm-foot, .cm-likes { color: #555 !important; }
+  .cm-tr { display: none !important; }
+  .cm-tr.on { display: block !important; font-size: 0 !important; margin-top: 3px; }
+  .cm-tr.on::after { content: attr(data-from); font-size: 11px; font-weight: 400; color: #555; }
   .cm-text a { color: #06c !important; text-decoration: underline; }
   .cm-text mark { background: #ffe9a8 !important; color: #000 !important; }
   .av { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -1010,6 +1017,7 @@ const S = {
   fetching: false, abort: null, authorMatcher: null, activeFilter: null,
   matches: [], matchIdx: -1, opHandle: null,
   hitRanges: new Map(), qualifying: new Set(),
+  tr: new Map(), showTr: new Set(), trBusy: new Set(), fg: new Map(), byId: new Map(),
 };
 
 /* ══ storage ═══════════════════════════════════════════════
@@ -1979,6 +1987,7 @@ async function loadPayload(payload) {
   // Also repairs previously cached downloads before filtering or rendering.
   payload = normalizePayload(payload);
   S.payload = payload;
+  resetTranslations(payload);
   const tops = [], byParent = new Map();
   for (const c of payload.comments) {
     if (c.parentId) {
@@ -2416,7 +2425,8 @@ function gotoMatch(i, smooth) {
   $$('#list mark.active').forEach((x) => x.classList.remove('active'));
   $$('#list .au-active').forEach((x) => x.classList.remove('au-active'));
   marks.forEach((mark) => mark.classList.add('active'));
-  if (m.k === null) target.classList.add('au-active');
+  // No mark to light up: an author/date match, or a comment showing its translation.
+  if (!marks.length) target.classList.add('au-active');
   target.scrollIntoView({ block: 'center', behavior: smooth === false ? 'auto' : 'smooth' });
   paintFindBar();
 }
@@ -2667,9 +2677,13 @@ function renderComment(c, isReply) {
 
   const text = document.createElement('div');
   text.className = 'cm-text';
-  buildText(text, c.text || '',
-            S.qualifying.has(c.id) ? S.hitRanges.get(c.id) : null);
   body.appendChild(text);
+  const trBtn = document.createElement('button');
+  trBtn.type = 'button';
+  trBtn.className = 'cm-tr';
+  trBtn.addEventListener('click', () => toggleTranslation(c.id));
+  body.appendChild(trBtn);
+  paintTr(text, trBtn, c);
 
   if (c.likeCount > 0) {
     const foot = document.createElement('div');
@@ -2741,6 +2755,177 @@ const EYE = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" 
   'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
   '<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/>' +
   '<circle cx="12" cy="12" r="2.6"/></svg>';
+
+/* ══ translation ═══════════════════════════════════════════
+   Per comment, on demand, through the endpoint Google's own translate widgets
+   use (translate.googleapis.com, client=gtx). It is undocumented: no published
+   limits, no SLA, and it can change or disappear. Throttling shows up as
+   429/503, or as an HTML page where JSON was expected.
+
+   Which comments offer "Translate to English" is decided locally, so nothing
+   is sent until the user asks. The rule is tuned so English comments don't
+   get the link: measured on 4 000 Tatoeba English sentences, 6 were flagged
+   (0.15%), and 0 of 68 one-to-three-word YouTube-style English comments.
+   The price is that very short foreign comments without telltale letters
+   ("Muy bueno", "Sehr gut") get no link. If one slips through anyway, the
+   endpoint's own detection removes the link after the first click. */
+const TR_URL = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t';
+// Efficient Language Detector, "large" n-gram set: ~1.3 MB over the wire once,
+// then browser-cached. Chosen over franc, CLD3 and fastText on the data above.
+const ELD_URL = 'https://cdn.jsdelivr.net/npm/eld@2.1.0/src/entries/static.large.js';
+// Below this many letters no detector is reliable: "no", "ok", "Super", "Top"
+// are words in several languages. Such texts get a link only for the cases below.
+const MIN_LETTERS = 12;
+const NON_LATIN_LETTER = /[^\P{L}\p{Script=Latin}]/gu;          // Cyrillic, CJK, Arabic, Hangul…
+// Latin letters English doesn't use. é is left out on purpose (café, Pokémon).
+const FOREIGN_LATIN = /[ąćęłńśźżñ¿¡çãõâêôàèìòùáíóúäöüßøæåđğışřžčšůőűěýœ]/i;
+
+let eldDetect = null, eldFailed = false;
+import(ELD_URL)
+  .then((m) => { eldDetect = (t) => m.eld.detect(t).language; })
+  .catch(() => { eldFailed = true; })         // CDN unreachable: only the script rule applies
+  .finally(() => refreshTranslateButtons());
+
+/* true = offer translation, false = don't, null = undecided until ELD loads. */
+function detectForeign(raw) {
+  // Links and @handles are names, not language.
+  const t = raw.replace(URL_RE, ' ').replace(/@[^\s@]+/g, ' ');
+  const n = (t.match(/\p{L}/gu) || []).length;
+  if (!n) return false;
+  if ((t.match(NON_LATIN_LETTER) || []).length / n > 0.5) return true;
+  if (n < MIN_LETTERS) return FOREIGN_LATIN.test(t);
+  if (eldDetect) { const l = eldDetect(t); return !!l && l !== 'en'; }
+  return eldFailed ? false : null;
+}
+function isForeign(c) {
+  if (S.fg.has(c.id)) return S.fg.get(c.id);
+  const v = detectForeign(c.text || '');
+  if (v !== null) S.fg.set(c.id, v);
+  return v === true;
+}
+
+const LANG_NAMES = (() => {
+  try { return new Intl.DisplayNames(['en'], { type: 'language' }); } catch { return null; }
+})();
+function langName(code) {
+  try { return (code && LANG_NAMES && LANG_NAMES.of(code)) || 'another language'; }
+  catch { return code || 'another language'; }
+}
+
+async function translateText(text) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 15000);
+  let r, d;
+  try {
+    // POST keeps 10 000-character comments out of the URL; a form body is a
+    // CORS "simple request", so there is no preflight.
+    r = await fetch(TR_URL, { method: 'POST', body: new URLSearchParams({ q: text }), signal: ctl.signal });
+    if (r.status === 429 || r.status === 503)
+      throw new Error('Google is limiting translation requests right now. Try again in a few minutes.');
+    if (!r.ok) throw new Error(`Translation failed (HTTP ${r.status}).`);
+    try { d = await r.json(); }
+    catch { throw new Error('Translation failed: Google returned a page instead of data, which can mean requests are being limited.'); }
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('Translation timed out. Try again.');
+    if (e instanceof TypeError) throw new Error('Translation failed: network error.');
+    throw e;
+  } finally { clearTimeout(timer); }
+  const parts = Array.isArray(d) && Array.isArray(d[0]) ? d[0] : [];
+  const out = parts.map((s) => (Array.isArray(s) && typeof s[0] === 'string' ? s[0] : '')).join('');
+  if (!out) throw new Error('Translation failed: the response had an unexpected format.');
+  return { text: out, src: typeof d[2] === 'string' ? d[2] : '' };
+}
+
+/* Translations are kept per video in localStorage as id -> [text, sourceLang,
+   hash of the original], so reopening a video costs no requests. The hash
+   discards a translation once its comment has been edited. */
+const trKey = (vid) => 'tr.' + vid;
+function resetTranslations(p) {
+  S.tr = new Map(); S.showTr = new Set(); S.trBusy = new Set(); S.fg = new Map();
+  S.byId = new Map(p.comments.map((c) => [c.id, c]));
+  for (const [id, v] of Object.entries(LS.get(trKey(p.videoId), {}))) {
+    const c = S.byId.get(id);
+    if (c && Array.isArray(v) && v[2] === hash(c.text || '')) S.tr.set(id, { text: v[0], src: v[1] });
+  }
+}
+function saveTranslation(vid, c, r) {
+  const all = LS.get(trKey(vid), {});
+  all[c.id] = [r.text, r.src, hash(c.text || '')];
+  LS.set(trKey(vid), all);            // best effort: if storage is full it lives in memory only
+}
+
+/* The translation being displayed for c, or null when the original is. */
+function shownTranslation(c) {
+  const t = S.tr.get(c.id);
+  return t && t.src !== 'en' && S.showTr.has(c.id) ? t : null;
+}
+
+function paintTr(text, btn, c, withText = true) {
+  const shown = shownTranslation(c);
+  if (withText) {
+    text.replaceChildren();
+    if (shown) {
+      // Search ranges index the original, so a translation is shown unhighlighted.
+      buildText(text, shown.text, null);
+      text.lang = 'en';
+    } else {
+      buildText(text, c.text || '', S.qualifying.has(c.id) ? S.hitRanges.get(c.id) : null);
+      text.removeAttribute('lang');
+    }
+  }
+  const cached = S.tr.get(c.id), busy = S.trBusy.has(c.id);
+  const offer = shown || busy || (isForeign(c) && !(cached && cached.src === 'en'));
+  btn.classList.toggle('hidden', !offer);
+  btn.classList.toggle('on', !!shown);
+  btn.disabled = busy;
+  btn.textContent = busy ? 'Translating…' : shown ? 'See original' : 'Translate to English';
+  if (shown) {
+    btn.dataset.from = `Translated from ${langName(shown.src)}`;
+    btn.dataset.tip = `${btn.dataset.from} by Google Translate`;
+  } else { delete btn.dataset.from; delete btn.dataset.tip; }
+}
+
+function repaintEl(el, withText) {
+  const c = S.byId.get(el.dataset.cid);
+  const text = el.querySelector(':scope > .cm-body > .cm-text');
+  const btn = el.querySelector(':scope > .cm-body > .cm-tr');
+  if (c && text && btn) paintTr(text, btn, c, withText);
+}
+function repaintComment(cid, withText = true) {
+  $$(`#list .cm[data-cid="${cssEscape(cid)}"]`).forEach((el) => repaintEl(el, withText));
+}
+/* The detector arrives after the first render; offer links that are now decidable. */
+function refreshTranslateButtons() {
+  if (S.payload) $$('#list .cm[data-cid]').forEach((el) => repaintEl(el, false));
+}
+
+async function toggleTranslation(cid) {
+  const c = S.byId.get(cid);
+  if (!c || !S.payload || S.trBusy.has(cid)) return;
+  if (S.showTr.has(cid)) { S.showTr.delete(cid); repaintComment(cid); return; }
+  const cached = S.tr.get(cid);
+  if (cached) {
+    if (cached.src !== 'en') S.showTr.add(cid);
+    repaintComment(cid);
+    return;
+  }
+  const vid = S.payload.videoId, busy = S.trBusy;
+  busy.add(cid);
+  repaintComment(cid, false);
+  try {
+    const r = await translateText(c.text || '');
+    saveTranslation(vid, c, r);
+    if (!S.payload || S.payload.videoId !== vid) return;   // another video was opened meanwhile
+    S.tr.set(cid, r);
+    if (r.src === 'en') toast('This comment is already in English.');
+    else S.showTr.add(cid);
+  } catch (e) {
+    toast(e.message || 'Translation failed.', 'err');
+  } finally {
+    busy.delete(cid);
+    if (S.payload && S.payload.videoId === vid) repaintComment(cid);
+  }
+}
 
 /* ── avatars & formatting ──────────────────────────────── */
 
@@ -2994,6 +3179,7 @@ function paintHistory() {
         { label: 'Delete', danger: true, fn: () => confirmBox('Delete this entry?',
             `“${h.title}” and its cached comments will be removed.`, async () => {
               await DB.del(h.videoId);
+              LS.del('tr.' + h.videoId);
               S.history = S.history.filter((x) => x.videoId !== h.videoId);
               LS.set('history', S.history);
               paintHistory(); paintStorage();
@@ -3031,6 +3217,7 @@ $('#wipeHist').addEventListener('click', () => confirmBox('Wipe the entire histo
   'Every entry and every cached copy of its comments will be deleted. This cannot be undone.',
   async () => {
     await DB.clear();
+    LS.keys().filter((k) => k.startsWith('tr.')).forEach((k) => LS.del(k));
     S.history = []; LS.set('history', []);
     paintHistory(); paintStorage(); toast('History wiped.');
   }));
@@ -3214,6 +3401,8 @@ function buildJSON() {
   const exportedComments = flat.map(c => {
     const copy = { ...c };
     if (!S.realAvatars) delete copy.avatarUrl;
+    const tr = S.tr.get(c.id);
+    if (tr && tr.src !== 'en') copy.translation = { text: tr.text, sourceLang: tr.src };
     return copy;
   });
   return JSON.stringify({
@@ -3258,6 +3447,7 @@ function buildHTML() {
   if (v.from || v.to) filt.push(`dates ${v.from || '…'} → ${v.to || '…'}`);
 
   const block = (c, isRep) => {
+    const tr = shownTranslation(c);     // exported as it is displayed
     const perma = `https://www.youtube.com/watch?v=${esc(p.videoId)}&lc=${esc(c.id)}`;
     const name = c.channelId
       ? `<a class="au" href="https://www.youtube.com/channel/${esc(c.channelId)}">${esc(c.author)}</a>`
@@ -3268,7 +3458,8 @@ function buildHTML() {
     return `<div class="c${isRep ? ' r' : ''}">${av}<div class="cb"><div class="h">${name} ` +
       `<a class="ts" href="${perma}">${fmtUTC(c.publishedAt)}</a>` +
       `${c.likeCount ? ` <span class="lk">${THUMB} ${c.likeCount.toLocaleString()}</span>` : ''}</div>` +
-      `<div class="t">${richHTML(c.text)}</div></div></div>`;
+      `<div class="t">${richHTML(tr ? tr.text : c.text)}</div>` +
+      `${tr ? `<div class="tn">Translated from ${esc(langName(tr.src))}</div>` : ''}</div></div>`;
   };
   // Same nested wrap/rail structure as the live view, so the saved file gets
   // one continuous rail per level and per-sub-thread collapsing too.
@@ -3326,6 +3517,7 @@ html.avatars-pending .doc{visibility:hidden}
 .au{font-weight:600;color:${fg};text-decoration:none}
 .ts,.lk{color:${mu};text-decoration:none}
 .t{white-space:pre-wrap;overflow-wrap:anywhere}
+.tn{margin-top:3px;font-size:12px;color:${mu}}
 a{color:${ac}}</style><script>document.documentElement.classList.add('avatars-pending');<\/script></head><body><div class="doc">
 <h1>${esc(p.title)}</h1><div class="meta">${esc(p.channelTitle)} ·
 <a href="https://www.youtube.com/watch?v=${esc(p.videoId)}">youtube.com/watch?v=${esc(p.videoId)}</a><br>
