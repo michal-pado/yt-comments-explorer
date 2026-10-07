@@ -38,6 +38,8 @@
   --danger: #c93a2c; --warn: #96700e; --good: #2d8558;
   --hit: #ffe08d; --hit-ink: #2a2000; --hit-active: #f5860a; --hit-active-ink: #fff7ec;
   --shadow: 0 20px 44px rgba(24,28,60,.16);
+  /* Mixing white with black turns grey; the theme's own deeper shade keeps its tint. */
+  --chrome: var(--panel-2);
 }
 
 /* Settings-only palettes. The first-run picker still offers Light and Dark
@@ -72,6 +74,8 @@
   --danger: #ff6060; --warn: #d6d64c; --good: #00ff5f;
   --hit: #205c25; --hit-ink: #d8ffd9; --hit-active: #9dff3c; --hit-active-ink: #0a1a00;
   --shadow: 0 20px 48px rgba(0,0,0,.8);
+  /* Already black, so nothing to darken: lift the bars with a hint of phosphor green. */
+  --chrome: color-mix(in srgb, var(--panel) 94%, var(--accent));
 }
 /* Sakura — pink surfaces, rose accent */
 :root[data-theme="sakura"] {
@@ -82,6 +86,7 @@
   --danger: #c0392b; --warn: #96700e; --good: #2d8558;
   --hit: #ffe08d; --hit-ink: #2a2000; --hit-active: #f5860a; --hit-active-ink: #fff7ec;
   --shadow: 0 20px 44px rgba(120,60,90,.18);
+  --chrome: var(--panel-2);
 }
 
 * { box-sizing: border-box; }
